@@ -1,0 +1,338 @@
+@page "/Admin/Accounts"
+@using PRN222.Web.Infrastructure
+@model PRN222.Web.Pages.Admin.AccountsModel
+@{
+    ViewData["Title"] = "Nhân sự & Khoa";
+    var headLecturerCount = Model.Accounts.Count(account => account.Roles.Contains(ApplicationRoles.HeadLecturer));
+    var lecturerCount = Model.Accounts.Count(account => account.Roles.Contains(ApplicationRoles.Lecturer));
+    var adminCount = Model.Accounts.Count(account => account.Roles.Contains(ApplicationRoles.Admin));
+    var needsAttentionCount = Model.Accounts.Count(account => !account.HasValidConfiguration);
+}
+
+<div class="js-governance-root" data-governance-page="accounts">
+    <section class="ops-hero admin-hero fade-in-up">
+        <div>
+            <span class="section-kicker">Admin workspace</span>
+            <h1>Nhân sự & Khoa</h1>
+            <p>
+                Tạo tài khoản giảng viên, gán Khoa và khóa phạm vi môn học để trưởng bộ môn chỉ phụ trách đúng tài liệu của Khoa mình.
+            </p>
+        </div>
+        <div class="hero-action-stack">
+            <a asp-page="/Course/Index" class="btn btn-outline-primary">
+                <i class="bi bi-journal-bookmark"></i>
+                <span>Danh sách môn học</span>
+            </a>
+        </div>
+    </section>
+
+    @await Html.PartialAsync("_StaffGovernanceTabs")
+
+    <div class="js-governance-flash">
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="inline-alert inline-alert-success fade-in-up" role="status">
+                <i class="bi bi-check-circle"></i>
+                <span>@TempData["SuccessMessage"]</span>
+            </div>
+        }
+
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="inline-alert inline-alert-danger fade-in-up" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>@TempData["ErrorMessage"]</span>
+            </div>
+        }
+    </div>
+
+    <section class="admin-summary-grid fade-in-up stagger-1">
+        <article class="course-summary-card">
+            <span>Admin</span>
+            <strong>@adminCount</strong>
+            <small>Quản trị hệ thống</small>
+        </article>
+        <article class="course-summary-card">
+            <span>Trưởng bộ môn</span>
+            <strong>@headLecturerCount</strong>
+            <small>Được nạp tài liệu trong môn phụ trách</small>
+        </article>
+        <article class="course-summary-card">
+            <span>Giảng viên</span>
+            <strong>@lecturerCount</strong>
+            <small>Chỉ xem môn được phân công</small>
+        </article>
+        <article class="course-summary-card accent">
+            <span>Cần xử lý</span>
+            <strong>@needsAttentionCount</strong>
+            <small>Thiếu Khoa, thiếu môn hoặc lệch phạm vi</small>
+        </article>
+    </section>
+
+    <section class="admin-account-layout fade-in-up stagger-2">
+        <article class="workspace-panel admin-account-form-panel">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Tạo tài khoản</span>
+                    <h2>Giảng viên hoặc trưởng bộ môn</h2>
+                    <p>Chọn Khoa trước, sau đó chỉ gán các môn thuộc Khoa đó.</p>
+                </div>
+            </div>
+
+            <form asp-page-handler="CreateAccount" method="post" class="course-form governance-form-steps js-governance-form">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="ModelOnly" class="inline-alert inline-alert-danger"></div>
+
+                <div class="course-field">
+                    <label for="Email">Email</label>
+                    <input id="Email" name="Email" type="email" value="@Model.NewAccount.Email" class="form-control" autocomplete="username" placeholder="lecturer@demo.local" required />
+                    @Html.ValidationMessage("Email", new { @class = "text-danger" })
+                </div>
+
+                <div class="course-field">
+                    <label for="Password">Mật khẩu</label>
+                    <input id="Password" name="Password" type="password" class="form-control" autocomplete="new-password" placeholder="Ít nhất 6 ký tự" minlength="6" required />
+                    @Html.ValidationMessage("Password", new { @class = "text-danger" })
+                </div>
+
+                <div class="course-field">
+                    <label for="Role">Vai trò</label>
+                    <select id="Role" name="Role" class="form-select">
+                        @foreach (var role in ApplicationRoles.StaffCreatableByAdmin)
+                        {
+                            <option value="@role" selected="@(Model.NewAccount.Role == role)">
+                                @ApplicationRoles.GetDisplayName(role)
+                            </option>
+                        }
+                    </select>
+                    <small>Admin chỉ tạo tài khoản giảng viên và trưởng bộ môn. Sinh viên tự đăng ký ở màn công khai.</small>
+                    @Html.ValidationMessage("Role", new { @class = "text-danger" })
+                </div>
+
+                <div class="course-field">
+                    <label for="DepartmentId">Khoa phụ trách</label>
+                    <select id="DepartmentId" name="DepartmentId" class="form-select js-department-picker" required>
+                        <option value="">Chọn Khoa trước khi chọn môn</option>
+                        @foreach (var department in Model.Departments)
+                        {
+                            <option value="@department.Id" selected="@(Model.NewAccount.DepartmentId == department.Id)">
+                                @department.Name (@department.Code)
+                            </option>
+                        }
+                    </select>
+                    <small>Khoa quyết định danh sách môn được phép gán bên dưới.</small>
+                    @Html.ValidationMessage("DepartmentId", new { @class = "text-danger" })
+                </div>
+
+                <div class="course-field admin-course-picker" id="createCoursePicker">
+                    <label>Môn học được phân công</label>
+                    @if (Model.Courses.Any())
+                    {
+                        <div class="admin-course-checkbox-grid">
+                            @foreach (var course in Model.Courses)
+                            {
+                                <label class="admin-course-option js-course-option" data-department-id="@(course.DepartmentId?.ToString() ?? "")">
+                                    <input type="checkbox"
+                                           name="CourseIds"
+                                           value="@course.Id"
+                                           checked="@Model.NewAccount.CourseIds.Contains(course.Id)" />
+                                    <span>
+                                        <strong>@course.Name</strong>
+                                        <small>@(course.DepartmentName ?? "Chưa gán Khoa") · @course.DocumentCount tài liệu</small>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                        <div class="admin-course-empty-state js-course-empty-state d-none" role="alert">
+                            <div class="admin-course-empty-copy">
+                                <strong>Khoa này chưa có môn học.</strong>
+                                <span class="js-course-empty-copy-text">Tạo môn mới hoặc vào màn Khoa để gán một môn hiện có vào đúng Khoa trước khi tạo tài khoản.</span>
+                            </div>
+                            <div class="admin-course-empty-actions">
+                                <a asp-page="/Course/Create" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-plus-lg"></i>
+                                    <span>Tạo môn mới</span>
+                                </a>
+                                <a asp-page="/Department/Index" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-building"></i>
+                                    <span>Gán môn vào Khoa</span>
+                                </a>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="inline-alert inline-alert-danger mb-0">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <span>Chưa có môn học. Hãy tạo môn và gán vào Khoa trước khi tạo tài khoản giảng viên hoặc trưởng bộ môn.</span>
+                        </div>
+                        <div class="admin-course-empty-actions">
+                            <a asp-page="/Course/Create" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-plus-lg"></i>
+                                <span>Tạo môn mới</span>
+                            </a>
+                            <a asp-page="/Department/Index" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-building"></i>
+                                <span>Quản lý Khoa</span>
+                            </a>
+                        </div>
+                    }
+                    <small>Trưởng bộ môn chỉ được nạp tài liệu cho các môn được gán trong Khoa này.</small>
+                    @Html.ValidationMessage("CourseIds", new { @class = "text-danger" })
+                </div>
+
+                <button type="submit" class="btn btn-primary admin-submit-btn">
+                    <i class="bi bi-person-plus"></i>
+                    <span>Tạo tài khoản</span>
+                </button>
+            </form>
+        </article>
+
+        <article class="workspace-panel admin-account-list-panel">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Danh sách tài khoản</span>
+                    <h2>Tài khoản vận hành</h2>
+                    <p>Theo dõi Khoa, môn được gán và cảnh báo cấu hình chưa hợp lệ.</p>
+                </div>
+            </div>
+
+            <div class="governance-toolbar" aria-label="Bộ lọc tài khoản">
+                <input class="form-control js-account-filter" type="search" placeholder="Tìm email hoặc Khoa..." aria-label="Tìm tài khoản" />
+                <select class="form-select js-account-role-filter" aria-label="Lọc vai trò">
+                    <option value="">Tất cả vai trò</option>
+                    <option value="@ApplicationRoles.HeadLecturer">Trưởng bộ môn</option>
+                    <option value="@ApplicationRoles.Lecturer">Giảng viên</option>
+                    <option value="@ApplicationRoles.Admin">Admin</option>
+                </select>
+                <select class="form-select js-account-status-filter" aria-label="Lọc trạng thái">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="valid">Đã đủ cấu hình</option>
+                    <option value="invalid">Cần xử lý</option>
+                </select>
+            </div>
+
+            @if (!Model.Accounts.Any())
+            {
+                <div class="empty-state compact">
+                    <i class="bi bi-people"></i>
+                    <h3>Chưa có tài khoản vận hành</h3>
+                    <p>Tạo tài khoản giảng viên hoặc trưởng bộ môn đầu tiên từ form bên trái.</p>
+                </div>
+            }
+            else
+            {
+                <div class="governance-account-list admin-account-list">
+                    @foreach (var account in Model.Accounts)
+                    {
+                        var roleFilter = $"|{string.Join("|", account.Roles)}|";
+                        var searchText = $"{account.Email} {account.DepartmentName}";
+                        <article class="governance-account-row admin-account-row"
+                                 data-search="@searchText"
+                                 data-roles="@roleFilter"
+                                 data-status="@(account.HasValidConfiguration ? "valid" : "invalid")">
+                            <div class="admin-account-avatar">
+                                <i class="bi bi-person"></i>
+                            </div>
+                            <div>
+                                <div class="governance-account-head">
+                                    <div>
+                                        <strong>@account.Email</strong>
+                                        <div class="admin-role-list">
+                                            @foreach (var role in account.Roles)
+                                            {
+                                                <span class="admin-role-badge admin-role-@role.ToLowerInvariant()">
+                                                    @ApplicationRoles.GetDisplayName(role)
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <span class="governance-status @(account.HasValidConfiguration ? "is-valid" : "is-warning")">
+                                        <i class="bi @(account.HasValidConfiguration ? "bi-check-circle" : "bi-exclamation-triangle")"></i>
+                                        @(account.HasValidConfiguration ? "Đủ cấu hình" : "Cần xử lý")
+                                    </span>
+                                </div>
+
+                                @if (account.CanAssignCourses)
+                                {
+                                    <div class="admin-assignment-summary">
+                                        <span>Khoa</span>
+                                        <strong>@(account.DepartmentName ?? "Chưa gán Khoa")</strong>
+                                    </div>
+                                    <div class="admin-assignment-summary">
+                                        <span>@account.AssignmentLabel</span>
+                                        <strong>@(account.AssignedCourseNames.Any() ? string.Join(", ", account.AssignedCourseNames) : "Chưa gán môn")</strong>
+                                    </div>
+                                    @if (account.InvalidAssignmentCount > 0)
+                                    {
+                                        <div class="inline-alert inline-alert-danger compact-alert" role="alert">
+                                            <i class="bi bi-exclamation-triangle"></i>
+                                            <span>@account.InvalidAssignmentCount môn đang lệch Khoa và sẽ bị từ chối ở các workflow tài liệu.</span>
+                                        </div>
+                                    }
+
+                                    <details class="governance-account-editor" data-governance-editor-id="@account.UserId">
+                                        <summary>
+                                            <i class="bi bi-sliders"></i>
+                                            <span>Chỉnh Khoa và môn học</span>
+                                        </summary>
+                                        <form asp-page-handler="UpdateAssignments"
+                                              asp-route-userId="@account.UserId"
+                                              method="post"
+                                              class="admin-assignment-form js-governance-form"
+                                              data-governance-ajax="true"
+                                              data-confirm-title="Xác nhận cập nhật phạm vi"
+                                              data-confirm-action="@account.AssignmentActionLabel"
+                                              data-confirm-message="Đổi Khoa hoặc danh sách môn sẽ thay đổi phạm vi tài liệu tài khoản này được xem. Tiếp tục?">
+                                            @Html.AntiForgeryToken()
+                                            <div class="course-field">
+                                                <label for="department_@account.UserId">Khoa</label>
+                                                <select id="department_@account.UserId" name="departmentId" class="form-select js-department-picker" required>
+                                                    <option value="">Chọn Khoa</option>
+                                                    @foreach (var department in Model.Departments)
+                                                    {
+                                                        <option value="@department.Id" selected="@(account.DepartmentId == department.Id)">
+                                                            @department.Name (@department.Code)
+                                                        </option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="admin-course-checkbox-grid compact">
+                                                @foreach (var course in Model.Courses)
+                                                {
+                                                    <label class="admin-course-option js-course-option" data-department-id="@(course.DepartmentId?.ToString() ?? "")">
+                                                        <input type="checkbox"
+                                                               name="courseIds"
+                                                               value="@course.Id"
+                                                               checked="@account.AssignedCourseIds.Contains(course.Id)" />
+                                                        <span>
+                                                            <strong>@course.Name</strong>
+                                                            <small>@(course.DepartmentName ?? "Chưa gán Khoa") · @course.DocumentCount tài liệu</small>
+                                                        </span>
+                                                    </label>
+                                                }
+                                            </div>
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-check2"></i>
+                                                <span>@account.AssignmentActionLabel</span>
+                                            </button>
+                                        </form>
+                                    </details>
+                                }
+                                else
+                                {
+                                    <p class="governance-muted-note">Admin không cần gán Khoa hoặc môn học.</p>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </article>
+    </section>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/governance.js" asp-append-version="true"></script>
+}

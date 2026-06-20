@@ -1,0 +1,151 @@
+@page "/Evaluation/Compare"
+@model PRN222.Web.Pages.Evaluation.CompareModel
+@{
+    ViewData["Title"] = "Compare Benchmarks";
+    var labels = new[] { "Faithfulness", "Answer Relevancy", "Context Precision", "Context Recall" };
+}
+
+<section class="page-heading">
+    <div>
+        <a asp-page="/Evaluation/Index" class="text-decoration-none text-muted mb-2 d-inline-block">
+            <i class="bi bi-arrow-left"></i> Back to Evaluation
+        </a>
+        <span class="section-eyebrow">Comparison</span>
+        <h1>Compare @Model.Summaries.Count Runs</h1>
+        <p>Side-by-side RAGAS evaluation comparison.</p>
+    </div>
+</section>
+
+<div class="row">
+    @* ─── RADAR CHART ─── *@
+    <div class="col-lg-6 mb-4">
+        <section class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <span class="section-eyebrow">Visualization</span>
+                    <h2>Metric Radar</h2>
+                </div>
+            </div>
+            <div style="height: 400px; display: flex; justify-content: center; align-items: center;">
+                <canvas id="compareChart"></canvas>
+            </div>
+        </section>
+    </div>
+
+    @* ─── METRIC TABLE ─── *@
+    <div class="col-lg-6 mb-4">
+        <section class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <span class="section-eyebrow">Data</span>
+                    <h2>Detailed Metrics</h2>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Metric</th>
+                            @foreach (var run in Model.Summaries)
+                            {
+                                <th class="text-center">@run.Run.Name<br/><small class="text-muted fw-normal">@run.Run.ExperimentType · @run.Run.EmbeddingModelName</small></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Faithfulness</strong></td>
+                            @foreach (var run in Model.Summaries)
+                            {
+                                <td class="text-center">@run.AvgFaithfulness.ToString("F3")</td>
+                            }
+                        </tr>
+                        <tr>
+                            <td><strong>Answer Relevancy</strong></td>
+                            @foreach (var run in Model.Summaries)
+                            {
+                                <td class="text-center">@run.AvgAnswerRelevancy.ToString("F3")</td>
+                            }
+                        </tr>
+                        <tr>
+                            <td><strong>Context Precision</strong></td>
+                            @foreach (var run in Model.Summaries)
+                            {
+                                <td class="text-center">@run.AvgContextPrecision.ToString("F3")</td>
+                            }
+                        </tr>
+                        <tr>
+                            <td><strong>Context Recall</strong></td>
+                            @foreach (var run in Model.Summaries)
+                            {
+                                <td class="text-center">@run.AvgContextRecall.ToString("F3")</td>
+                            }
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('compareChart').getContext('2d');
+        
+        // Colors palette
+        const colors = [
+            { bg: 'rgba(54, 162, 235, 0.2)', border: 'rgb(54, 162, 235)' },
+            { bg: 'rgba(255, 99, 132, 0.2)', border: 'rgb(255, 99, 132)' },
+            { bg: 'rgba(75, 192, 192, 0.2)', border: 'rgb(75, 192, 192)' },
+            { bg: 'rgba(255, 159, 64, 0.2)', border: 'rgb(255, 159, 64)' },
+            { bg: 'rgba(153, 102, 255, 0.2)', border: 'rgb(153, 102, 255)' }
+        ];
+
+        const datasets = [];
+        
+        @for (int i = 0; i < Model.Summaries.Count; i++)
+        {
+            var summary = Model.Summaries[i];
+            <text>
+            datasets.push({
+                label: '@Html.Raw(summary.Run.ExperimentType + ": " + summary.Run.Name)',
+                data: [
+                    @summary.AvgFaithfulness.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                    @summary.AvgAnswerRelevancy.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                    @summary.AvgContextPrecision.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                    @summary.AvgContextRecall.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
+                ],
+                backgroundColor: colors[@i % colors.length].bg,
+                borderColor: colors[@i % colors.length].border,
+                pointBackgroundColor: colors[@i % colors.length].border,
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: colors[@i % colors.length].border
+            });
+            </text>
+        }
+
+        new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: ['Faithfulness', 'Answer Relevancy', 'Context Precision', 'Context Recall'],
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        angleLines: { display: true },
+                        suggestedMin: 0,
+                        suggestedMax: 1
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    </script>
+}

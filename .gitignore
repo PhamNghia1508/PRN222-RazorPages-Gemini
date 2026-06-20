@@ -1,0 +1,38 @@
+## Ignore Visual Studio & VS Code files
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Ignore build output
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.log
+
+## Ignore dotnet user secrets and launch settings local
+# properties/launchSettings.json is sometimes ignored, but usually tracked. We can track it as it is needed to run, but ignore any personal settings.
+# Let's keep it tracked as we need launchSettings.json.
+
+## Ignore uploaded files / App_Data contents
+src/PRN222.MVC/App_Data/
+src/PRN222.MVC/App_Data/uploads/
+src/PRN222.Web/App_Data/
+src/PRN222.Web/App_Data/uploads/
+App_Data/
+uploads/
+
+## Ignore specific user directories
+references/
+.qodo/
+.superpowers/
+.playwright-mcp/
+artifacts/
+.worktrees/
+
+## Ignore local working docs
+bookstore-management-diagrams.md
+docs/student_lecturer_connection_logic.md

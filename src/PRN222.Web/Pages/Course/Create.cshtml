@@ -1,0 +1,75 @@
+@page "/Course/Create"
+@model PRN222.Web.Pages.Course.CreateModel
+@{
+    ViewData["Title"] = "Them mon hoc";
+}
+
+<section class="ops-hero course-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Course setup</span>
+        <h1>Them mon hoc</h1>
+        <p>Tao pham vi tri thuc moi truoc khi nap tai lieu, sinh dataset va chay benchmark.</p>
+    </div>
+    <div class="hero-action-stack">
+        <a asp-page="/Course/Index" class="btn btn-outline-primary">
+            <i class="bi bi-arrow-left"></i>
+            <span>Quay lai danh sach</span>
+        </a>
+    </div>
+</section>
+
+<section class="workspace-panel course-form-panel fade-in-up stagger-1">
+    <div class="workspace-panel-header">
+        <div>
+            <span class="section-kicker">Thong tin mon</span>
+            <h2>Noi dung hien thi trong he thong</h2>
+            <p>Ten mon se xuat hien o Chat, Kho tri thuc, Fine-tuning va Benchmark.</p>
+        </div>
+    </div>
+
+    <form method="post" class="course-form">
+        @Html.AntiForgeryToken()
+
+        <div asp-validation-summary="ModelOnly" class="inline-alert inline-alert-danger"></div>
+
+        <div class="course-field">
+            <label asp-for="Input.Name">Ten mon hoc</label>
+            <input asp-for="Input.Name" class="form-control" required placeholder="VD: PRN222 - .NET Web Development" />
+            <span asp-validation-for="Input.Name" class="text-danger"></span>
+        </div>
+
+        <div class="course-field">
+            <label asp-for="Input.DepartmentId">Khoa phu trach</label>
+            <select asp-for="Input.DepartmentId" class="form-select" required>
+                <option value="">Chon Khoa quan ly mon hoc</option>
+                @foreach (var department in Model.Input.Departments)
+                {
+                    <option value="@department.Id">@department.Name (@department.Code)</option>
+                }
+            </select>
+            <small>Giang vien chi co the duoc phan cong mon thuoc dung Khoa cua minh.</small>
+            <span asp-validation-for="Input.DepartmentId" class="text-danger"></span>
+        </div>
+
+        <div class="course-field">
+            <label asp-for="Input.Description">Mo ta ngan</label>
+            <textarea asp-for="Input.Description" class="form-control course-description-input" placeholder="Mo ta ngan ve pham vi tai lieu cua mon hoc"></textarea>
+            <small>Mo ta giup giang vien nhan biet nhanh khi chon course trong cac man van hanh.</small>
+        </div>
+
+        <div class="course-form-actions">
+            <a asp-page="/Course/Index" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i>
+                <span>Huy</span>
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save"></i>
+                <span>Luu mon hoc</span>
+            </button>
+        </div>
+    </form>
+</section>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

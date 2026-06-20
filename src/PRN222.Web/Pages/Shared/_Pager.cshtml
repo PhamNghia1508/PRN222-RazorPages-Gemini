@@ -1,0 +1,57 @@
+@using PRN222.BLL.DTOs
+@using PRN222.Web.Models.Pagination
+@model dynamic
+
+@{
+    var paged = (IPagedResult)Model.Paged;
+    var routeValues = Model.RouteValues as IReadOnlyDictionary<string, string?>
+        ?? new Dictionary<string, string?>();
+    var label = (string?)Model.Label ?? "items";
+    var startPage = Math.Max(1, paged.Page - 2);
+    var endPage = paged.TotalPages == 0 ? 1 : Math.Min(paged.TotalPages, paged.Page + 2);
+}
+
+<div class="pager-shell" aria-label="Pagination">
+    <div class="result-count">
+        @if (paged.TotalItems == 0)
+        {
+            <span>No @label found</span>
+        }
+        else
+        {
+            <span>Showing @paged.FirstItemIndex-@paged.LastItemIndex of @paged.TotalItems @label</span>
+        }
+    </div>
+
+    <div class="pager-links">
+        <a class="btn btn-outline-secondary btn-sm @(paged.HasPreviousPage ? "" : "disabled")"
+           asp-all-route-data="@PagerRouteValueBuilder.Build(routeValues, paged.Page - 1)">
+            <i class="bi bi-chevron-left"></i> Previous
+        </a>
+
+        @for (var pageNumber = startPage; pageNumber <= endPage; pageNumber++)
+        {
+            <a class="btn btn-sm @(pageNumber == paged.Page ? "btn-primary" : "btn-outline-secondary")"
+               asp-all-route-data="@PagerRouteValueBuilder.Build(routeValues, pageNumber)"
+               aria-current="@(pageNumber == paged.Page ? "page" : null)">
+                @pageNumber
+            </a>
+        }
+
+        <a class="btn btn-outline-secondary btn-sm @(paged.HasNextPage ? "" : "disabled")"
+           asp-all-route-data="@PagerRouteValueBuilder.Build(routeValues, paged.Page + 1)">
+            Next <i class="bi bi-chevron-right"></i>
+        </a>
+    </div>
+
+    <div class="page-size-control">
+        <span>Rows</span>
+        @foreach (var size in PagedResult<object>.AllowedPageSizes)
+        {
+            <a class="@(size == paged.PageSize ? "active" : "")"
+               asp-all-route-data="@PagerRouteValueBuilder.BuildForPageSize(routeValues, size)">
+                @size
+            </a>
+        }
+    </div>
+</div>

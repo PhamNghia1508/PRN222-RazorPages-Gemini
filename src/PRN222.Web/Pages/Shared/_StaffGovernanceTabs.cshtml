@@ -1,0 +1,32 @@
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
+    bool IsActive(string controller, string pagePrefix)
+    {
+        return string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrWhiteSpace(currentPage) &&
+             currentPage.StartsWith(pagePrefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    string TabClass(string controller, string pagePrefix)
+    {
+        return IsActive(controller, pagePrefix)
+            ? "governance-tab active"
+            : "governance-tab";
+    }
+}
+
+<nav class="governance-tabs" aria-label="Nhân sự và Khoa">
+    <a class="@TabClass("Admin", "/Admin")"
+       aria-current="@(IsActive("Admin", "/Admin") ? "page" : null)"
+       asp-page="/Admin/Accounts">
+        <i class="bi bi-people"></i>
+        <span>Tài khoản giảng viên</span>
+    </a>
+    <a class="@TabClass("Department", "/Department")"
+       aria-current="@(IsActive("Department", "/Department") ? "page" : null)"
+       asp-page="/Department/Index">
+        <i class="bi bi-building"></i>
+        <span>Khoa và phạm vi môn học</span>
+    </a>
+</nav>

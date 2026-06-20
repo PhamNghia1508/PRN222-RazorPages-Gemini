@@ -1,0 +1,147 @@
+@page "/Evaluation/RunDetail/{runId:int}"
+@model PRN222.Web.Pages.Evaluation.RunDetailModel
+@{
+    var summary = Model.Detail.Summary;
+    var run = summary.Run;
+    var routeValues = Model.RouteValues;
+    ViewData["Title"] = "Benchmark Detail: " + run.Name;
+}
+
+<section class="evaluation-detail-hero">
+    <div>
+        <a asp-page="/Evaluation/Index" class="evaluation-back-link">
+            <i class="bi bi-arrow-left"></i>
+            <span>Back to Evaluation</span>
+        </a>
+        <span class="section-eyebrow">Run detail</span>
+        <h1>@run.Name</h1>
+        <div class="evaluation-detail-meta">
+            <span class="evaluation-type-badge @(run.ExperimentType == "FineTuned" ? "type-finetuned" : "type-rag")">@run.ExperimentType</span>
+            <span class="evaluation-status @GetStatusClass(run.Status)">@run.Status</span>
+            <span><i class="bi bi-clock"></i> @run.StartedAt.ToString("dd/MM/yyyy HH:mm")</span>
+            <span><i class="bi bi-ui-checks"></i> @run.TotalQuestions questions</span>
+        </div>
+    </div>
+    <div class="page-heading-actions">
+        <a asp-page="/Evaluation/RunDetail" asp-route-runId="@run.Id" asp-page-handler="ExportCsv" class="btn btn-outline-primary">
+            <i class="bi bi-file-earmark-spreadsheet"></i>
+            <span>Export CSV</span>
+        </a>
+    </div>
+</section>
+
+<section class="evaluation-detail-layout">
+    <aside class="evaluation-run-facts">
+        <div class="evaluation-fact-card">
+            <span>Experiment</span>
+            <strong>@run.ExperimentType</strong>
+            <p>@(run.ExperimentType == "FineTuned" ? "Direct fine-tuned endpoint baseline." : "Retrieval augmented generation pipeline.")</p>
+        </div>
+        <div class="evaluation-fact-card">
+            <span>Retrieval setup</span>
+            <strong>@run.ChunkingStrategy</strong>
+            <p>@run.EmbeddingModelName · chunk @run.ChunkSize / overlap @run.ChunkOverlap</p>
+        </div>
+        <div class="evaluation-fact-card">
+            <span>Context metrics</span>
+            <strong>@summary.AvgContextPrecision.ToString("F2") / @summary.AvgContextRecall.ToString("F2")</strong>
+            <p>Precision / recall. FineTuned baselines are expected to stay at 0.</p>
+        </div>
+    </aside>
+
+    <main class="evaluation-detail-main">
+        <section class="evaluation-score-grid">
+            <article class="evaluation-score-card">
+                <span>Faithfulness</span>
+                <strong>@summary.AvgFaithfulness.ToString("F3")</strong>
+                <small>Keyword overlap with ground truth.</small>
+            </article>
+            <article class="evaluation-score-card">
+                <span>Answer relevancy</span>
+                <strong>@summary.AvgAnswerRelevancy.ToString("F3")</strong>
+                <small>Question-answer embedding similarity.</small>
+            </article>
+            <article class="evaluation-score-card">
+                <span>Context precision</span>
+                <strong>@summary.AvgContextPrecision.ToString("F3")</strong>
+                <small>Useful retrieved chunks ratio.</small>
+            </article>
+            <article class="evaluation-score-card">
+                <span>Context recall</span>
+                <strong>@summary.AvgContextRecall.ToString("F3")</strong>
+                <small>Ground-truth coverage from context.</small>
+            </article>
+        </section>
+
+        <section class="evaluation-results-panel">
+            <div class="evaluation-panel-header">
+                <div>
+                    <span class="section-eyebrow">Question-level review</span>
+                    <h2>Generated answers</h2>
+                    <p>Inspect each generated answer beside the expected answer and metrics.</p>
+                </div>
+            </div>
+
+            @if (!Model.Detail.Results.Items.Any())
+            {
+                <div class="empty-state compact">
+                    <i class="bi bi-list-check"></i>
+                    <h3>No question-level results available</h3>
+                    <p>This run might still be processing or failed to generate results.</p>
+                </div>
+            }
+            else
+            {
+                <div class="evaluation-result-list">
+                    @foreach (var result in Model.Detail.Results.Items)
+                    {
+                        <article class="evaluation-result-card">
+                            <div class="evaluation-result-question">
+                                <span>Question</span>
+                                <h3>@result.Question</h3>
+                            </div>
+
+                            <div class="evaluation-answer-grid">
+                                <div class="evaluation-answer-box expected">
+                                    <span>Ground truth</span>
+                                    <p>@result.GroundTruth</p>
+                                </div>
+                                <div class="evaluation-answer-box generated">
+                                    <span>Generated answer</span>
+                                    <p>@result.GeneratedAnswer</p>
+                                </div>
+                            </div>
+
+                            <div class="evaluation-result-metrics">
+                                <span class="@GetScorePillClass(result.Faithfulness)">Faithfulness @result.Faithfulness.ToString("F2")</span>
+                                <span class="@GetScorePillClass(result.AnswerRelevancy)">Relevancy @result.AnswerRelevancy.ToString("F2")</span>
+                                <span class="@GetScorePillClass(result.ContextPrecision)">Precision @result.ContextPrecision.ToString("F2")</span>
+                                <span class="@GetScorePillClass(result.ContextRecall)">Recall @result.ContextRecall.ToString("F2")</span>
+                            </div>
+                        </article>
+                    }
+                </div>
+
+                <partial name="_Pager" model="@(new { Paged = Model.Detail.Results, RouteValues = routeValues, Label = "questions" })" />
+            }
+        </section>
+    </main>
+</section>
+
+@functions {
+    private static string GetStatusClass(string status) => status switch
+    {
+        "Completed" => "status-good",
+        "Running" => "status-running",
+        "Failed" => "status-bad",
+        "CompletedWithErrors" => "status-warn",
+        _ => "status-muted"
+    };
+
+    private static string GetScorePillClass(float score)
+    {
+        if (score > 0.7f) return "evaluation-score-pill score-good";
+        if (score >= 0.4f) return "evaluation-score-pill score-warn";
+        return "evaluation-score-pill score-bad";
+    }
+}

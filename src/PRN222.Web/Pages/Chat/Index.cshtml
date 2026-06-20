@@ -1,0 +1,197 @@
+@page "/Chat"
+@model PRN222.Web.Pages.Chat.IndexModel
+@{
+    ViewData["Title"] = "Nhật ký Vấn đáp";
+
+    var today = DateTime.Today;
+    var yesterday = today.AddDays(-1);
+    var startOfWeek = today.AddDays(-(int)today.DayOfWeek);
+
+    var groups = Model.Sessions
+        .OrderByDescending(s => s.LastMessageAt ?? s.CreatedAt)
+        .GroupBy(s => {
+            var date = (s.LastMessageAt ?? s.CreatedAt).ToLocalTime().Date;
+            if (date == today) return "Hôm nay";
+            if (date == yesterday) return "Hôm qua";
+            if (date >= startOfWeek) return "Tuần này";
+            return "Cũ hơn";
+        });
+
+    // Bento Learning Dashboard Metrics
+    var totalSessions = Model.Sessions.Count;
+    var totalMessages = Model.Sessions.Sum(s => s.MessageCount);
+
+    var activeDates = Model.Sessions
+        .Select(s => (s.LastMessageAt ?? s.CreatedAt).ToLocalTime().Date)
+        .Distinct()
+        .OrderByDescending(d => d)
+        .ToList();
+    var activeDaysCount = activeDates.Count;
+
+    int streak = 0;
+    var checkDate = today;
+    if (activeDates.Any())
+    {
+        if (!activeDates.Contains(checkDate) && activeDates.Contains(checkDate.AddDays(-1)))
+        {
+            checkDate = checkDate.AddDays(-1);
+        }
+        while (activeDates.Contains(checkDate))
+        {
+            streak++;
+            checkDate = checkDate.AddDays(-1);
+        }
+    }
+}
+
+<div class="poetic-history-container">
+    <div class="poetic-history-header">
+        <div class="poetic-history-title">
+            <h2>Nhật Ký Vấn Đáp</h2>
+            <p>Hỏi đáp với trợ lý tri thức RAG dựa trên tài liệu học tập của bạn.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div style="position: relative;">
+                <input type="text" id="historySearchInput" placeholder="Tìm kiếm tiêu đề..." style="background: #FFFFFF; border: 1px solid #D5C9B3; border-radius: 20px; padding: 10px 20px 10px 40px; font-family: inherit; font-size: 13.5px; width: 230px; outline: none; transition: all 0.2s; box-shadow: 0 2px 8px rgba(80,60,40,0.02);" />
+                <i class="ph-light ph-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #8A7A6A; font-size: 16px;"></i>
+            </div>
+            <a asp-page="/Chat/Session" class="poetic-history-btn" style="background: var(--accent-color); color: #fff; border-color: var(--accent-color); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; padding: 10px 24px; width: auto; margin-bottom: 0;">
+                <i class="ph-light ph-plus-circle"></i> Bắt đầu Chat mới
+            </a>
+        </div>
+    </div>
+
+    @if (Model.Sessions.Any())
+    {
+        <div class="poetic-bento-dashboard">
+            <div class="poetic-bento-db-card">
+                <i class="ph-light ph-fire"></i>
+                <div class="poetic-bento-db-card-content">
+                    <h5>Streak Học Tập</h5>
+                    <h3>@streak Ngày</h3>
+                </div>
+            </div>
+            <div class="poetic-bento-db-card">
+                <i class="ph-light ph-chats-teardrop"></i>
+                <div class="poetic-bento-db-card-content">
+                    <h5>Lượt Vấn Đáp</h5>
+                    <h3>@totalMessages</h3>
+                </div>
+            </div>
+            <div class="poetic-bento-db-card">
+                <i class="ph-light ph-clock-counter-clockwise"></i>
+                <div class="poetic-bento-db-card-content">
+                    <h5>Số Chủ Đề Vừa Hỏi</h5>
+                    <h3>@totalSessions</h3>
+                </div>
+            </div>
+            <div class="poetic-bento-db-card">
+                <i class="ph-light ph-calendar"></i>
+                <div class="poetic-bento-db-card-content">
+                    <h5>Ngày Tích Cực</h5>
+                    <h3>@activeDaysCount Ngày</h3>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (!Model.Sessions.Any())
+    {
+        <div class="poetic-empty-state" style="margin-top: 15vh;">
+            <i class="ph-light ph-chats-teardrop" style="font-size: 64px;"></i>
+            <h2>Chưa có phiên vấn đáp nào</h2>
+            <p>Nhấp "Bắt đầu Chat mới" ở trên để gửi câu hỏi đầu tiên của bạn.</p>
+        </div>
+    }
+    else
+    {
+        foreach (var group in groups)
+        {
+            <div class="poetic-history-section-title">
+                ✦ @group.Key (@group.Count())
+            </div>
+            <div class="poetic-history-grid">
+                @foreach (var session in group)
+                {
+                    <div class="poetic-history-card">
+                        <div>
+                            <h3>@session.SessionTitle</h3>
+                            <div class="poetic-history-meta">
+                                <span><i class="ph-light ph-calendar"></i> Bắt đầu: @session.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                                @if (session.LastMessageAt.HasValue)
+                                {
+                                    <span><i class="ph-light ph-arrow-counter-clockwise"></i> Cập nhật: @session.LastMessageAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                                }
+                            </div>
+                        </div>
+                        <a asp-page="/Chat/Session" asp-route-id="@session.Id" class="poetic-history-btn">
+                            Tiếp tục Vấn đáp <i class="ph-light ph-arrow-right"></i>
+                        </a>
+                    </div>
+                }
+            </div>
+        }
+
+        <div id="noSearchResults" class="poetic-empty-state" style="margin-top: 15vh; display: none;">
+            <i class="ph-light ph-magnifying-glass" style="font-size: 64px;"></i>
+            <h2>Không tìm thấy kết quả</h2>
+            <p>Hãy thử tìm kiếm với từ khóa khác.</p>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            const searchInput = $('#historySearchInput');
+            const noResults = $('#noSearchResults');
+
+            searchInput.on('input', function () {
+                const query = $(this).val().trim().toLowerCase();
+                let hasVisibleCards = false;
+
+                if (!query) {
+                    $('.poetic-history-section-title').show();
+                    $('.poetic-history-grid').show();
+                    $('.poetic-history-card').show();
+                    noResults.hide();
+                    return;
+                }
+
+                $('.poetic-history-grid').each(function () {
+                    const grid = $(this);
+                    const title = grid.prev('.poetic-history-section-title');
+                    let gridHasVisibleCards = false;
+
+                    grid.find('.poetic-history-card').each(function () {
+                        const card = $(this);
+                        const titleText = card.find('h3').text().toLowerCase();
+
+                        if (titleText.includes(query)) {
+                            card.show();
+                            gridHasVisibleCards = true;
+                            hasVisibleCards = true;
+                        } else {
+                            card.hide();
+                        }
+                    });
+
+                    if (gridHasVisibleCards) {
+                        grid.show();
+                        title.show();
+                    } else {
+                        grid.hide();
+                        title.hide();
+                    }
+                });
+
+                if (hasVisibleCards) {
+                    noResults.hide();
+                } else {
+                    noResults.show();
+                }
+            });
+        });
+    </script>
+}
+

@@ -1,0 +1,241 @@
+@page "/Document"
+@using PRN222.Web.Infrastructure
+@model PRN222.Web.Pages.Document.IndexModel
+@{
+    ViewData["Title"] = "Kho tri thức";
+    var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var documents = Model.Documents.Items.ToList();
+    var search = Model.Search;
+    var courseId = Model.SelectedCourseId;
+    var selectedStatus = Model.SelectedStatus;
+    var selectedFileType = Model.SelectedFileType;
+    var courses = Model.Courses;
+    var hasActiveFilters = Model.HasActiveFilters;
+    var totalChunks = documents.Sum(x => x.ChunkCount);
+    var readyCount = documents.Count(x =>
+        string.Equals(x.Status, "Indexed", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(x.Status, "Completed", StringComparison.OrdinalIgnoreCase));
+    var processingCount = documents.Count(x => string.Equals(x.Status, "Processing", StringComparison.OrdinalIgnoreCase));
+
+    string FileIcon(string contentType)
+    {
+        if (contentType.Contains("pdf", StringComparison.OrdinalIgnoreCase)) return "bi-filetype-pdf";
+        if (contentType.Contains("presentation", StringComparison.OrdinalIgnoreCase) || contentType.Contains("powerpoint", StringComparison.OrdinalIgnoreCase)) return "bi-filetype-ppt";
+        if (contentType.Contains("word", StringComparison.OrdinalIgnoreCase)) return "bi-filetype-doc";
+        if (contentType.Contains("text", StringComparison.OrdinalIgnoreCase)) return "bi-file-text";
+        return "bi-file-earmark-text";
+    }
+
+    string StatusClass(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "indexed" => "status-good",
+            "completed" => "status-good",
+            "processing" => "status-running",
+            "failed" => "status-bad",
+            _ => "status-muted"
+        };
+    }
+
+    string StatusText(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "indexed" => "Đã index",
+            "completed" => "Đã index",
+            "uploaded" => "Chờ xử lý",
+            "processing" => "Đang xử lý",
+            "failed" => "Lỗi",
+            _ => status ?? "Chưa rõ"
+        };
+    }
+
+    string FormatSize(long bytes)
+    {
+        if (bytes >= 1024 * 1024) return $"{bytes / 1024d / 1024d:0.0} MB";
+        if (bytes >= 1024) return $"{bytes / 1024d:0.0} KB";
+        return $"{bytes} B";
+    }
+}
+
+<section class="ops-hero knowledge-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Knowledge base</span>
+        <h1>Tài liệu nguồn cho RAG</h1>
+        <p>
+            Quản lý tài liệu đã nạp, theo dõi trạng thái extract/chunk/embedding và mở nhanh nguồn dùng làm evidence cho Chat RAG.
+        </p>
+    </div>
+    <div class="hero-action-stack">
+        @if (canUploadDocuments)
+        {
+            <a asp-page="/Document/Upload" class="btn btn-primary">
+                <i class="bi bi-cloud-upload"></i>
+                <span>Nạp tài liệu</span>
+            </a>
+        }
+        <a asp-page="/Chat/Session" class="btn btn-outline-primary">
+            <i class="bi bi-chat-dots"></i>
+            <span>Thử chat</span>
+        </a>
+    </div>
+</section>
+
+<div id="documentRealtimeWorkspace"
+     data-refresh-url="@Url.Page("/Document/Index", "WorkspacePartial", new { courseId, status = selectedStatus, fileType = selectedFileType, search, page = Model.Documents.Page, pageSize = Model.Documents.PageSize })"
+     aria-live="polite">
+<section class="knowledge-summary-grid fade-in-up stagger-1">
+    <article class="knowledge-summary-card">
+        <span>Tổng tài liệu</span>
+        <strong>@Model.Documents.TotalItems</strong>
+        <small>@documents.Count tài liệu trong trang hiện tại</small>
+    </article>
+    <article class="knowledge-summary-card">
+        <span>Sẵn sàng RAG</span>
+        <strong>@readyCount</strong>
+        <small>Đã có chunk để retrieval</small>
+    </article>
+    <article class="knowledge-summary-card">
+        <span>Chunks indexed</span>
+        <strong>@totalChunks</strong>
+        <small>Tổng chunk trong trang này</small>
+    </article>
+    <article class="knowledge-summary-card accent">
+        <span>Đang xử lý</span>
+        <strong>@processingCount</strong>
+        <small>Đang extract hoặc embedding</small>
+    </article>
+</section>
+
+<section class="workspace-panel fade-in-up stagger-2">
+    <div class="workspace-panel-header">
+        <div>
+            <span class="section-kicker">Corpus browser</span>
+            <h2>Duyệt tài liệu đã nạp</h2>
+            <p>Lọc theo môn học, loại file hoặc tên tài liệu để kiểm tra nhanh nguồn dữ liệu.</p>
+        </div>
+    </div>
+
+    <form method="get" class="knowledge-filter-bar">
+        <div class="knowledge-filter-field">
+            <label for="search">Tên tài liệu</label>
+            <input id="search" name="search" value="@search" class="form-control" placeholder="Tìm theo tên file hoặc môn học..." />
+        </div>
+        <div class="knowledge-filter-field">
+            <label for="courseId">Môn học</label>
+            <select id="courseId" name="courseId" class="form-select">
+                <option value="">Tất cả môn học</option>
+                @foreach (var course in courses)
+                {
+                    <option value="@course.Id" selected="@(courseId == course.Id)">@course.Name</option>
+                }
+            </select>
+        </div>
+        <div class="knowledge-filter-field">
+            <label for="status">Trạng thái</label>
+            <select id="status" name="status" class="form-select">
+                <option value="">Tất cả trạng thái</option>
+                <option value="Uploaded" selected="@(selectedStatus == "Uploaded")">Chờ xử lý</option>
+                <option value="Processing" selected="@(selectedStatus == "Processing")">Đang xử lý</option>
+                <option value="Indexed" selected="@(selectedStatus == "Indexed")">Đã index</option>
+                <option value="Failed" selected="@(selectedStatus == "Failed")">Lỗi</option>
+            </select>
+        </div>
+        <div class="knowledge-filter-field">
+            <label for="fileType">Loại file</label>
+            <select id="fileType" name="fileType" class="form-select">
+                <option value="">Tất cả file</option>
+                <option value="pdf" selected="@(selectedFileType == "pdf")">PDF</option>
+                <option value="docx" selected="@(selectedFileType == "docx")">DOCX</option>
+                <option value="ppt" selected="@(selectedFileType == "ppt")">PPT/PPTX</option>
+            </select>
+        </div>
+        <div class="knowledge-filter-actions">
+            <button class="btn btn-primary" type="submit">
+                <i class="bi bi-search"></i>
+                <span>Lọc</span>
+            </button>
+            @if (hasActiveFilters)
+            {
+                <a asp-page="/Document/Index" class="btn btn-outline-secondary" title="Xóa bộ lọc">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            }
+        </div>
+    </form>
+
+    @if (!documents.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-database-x"></i>
+            <h3>Chưa có tài liệu phù hợp</h3>
+            @if (canUploadDocuments)
+            {
+                <p>Nạp tài liệu mới hoặc thay đổi bộ lọc hiện tại.</p>
+                <a asp-page="/Document/Upload" class="btn btn-primary">
+                    <i class="bi bi-cloud-upload"></i>
+                    <span>Nạp tài liệu</span>
+                </a>
+            }
+            else
+            {
+                <p>Thay đổi bộ lọc để tìm tài liệu khác. Tài khoản này không có quyền nạp tài liệu nguồn.</p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="knowledge-document-list">
+            @foreach (var document in documents)
+            {
+                <article class="knowledge-document-card">
+                    <div class="knowledge-file-icon">
+                        <i class="bi @FileIcon(document.ContentType)"></i>
+                    </div>
+                    <div class="knowledge-document-main">
+                        <div class="knowledge-document-title">
+                            <div>
+                                <h3>@document.OriginalFileName</h3>
+                                <p>@document.CourseName</p>
+                            </div>
+                            <span class="evaluation-status @StatusClass(document.Status)">@StatusText(document.Status)</span>
+                        </div>
+                        <div class="knowledge-document-meta">
+                            <span><i class="bi bi-hdd"></i> @FormatSize(document.FileSize)</span>
+                            <span><i class="bi bi-layers"></i> @document.ChunkCount chunk</span>
+                            <span><i class="bi bi-clock"></i> @document.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                        </div>
+                        <div class="knowledge-progress-track" aria-hidden="true">
+                            <span style="width:@(document.ChunkCount > 0 ? 100 : 35)%"></span>
+                        </div>
+                    </div>
+                    <div class="knowledge-document-actions">
+                        <a asp-page="/Document/Details" asp-route-id="@document.Id" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i>
+                            <span>Chi tiết</span>
+                        </a>
+                    </div>
+                </article>
+            }
+        </div>
+
+        @if (Model.Documents.TotalPages > 1)
+        {
+            <nav class="knowledge-pagination" aria-label="Phân trang tài liệu">
+                @for (var pageNumber = 1; pageNumber <= Model.Documents.TotalPages; pageNumber++)
+                {
+                    <a class="@(pageNumber == Model.Documents.Page ? "active" : null)"
+                       asp-page="/Document/Index"
+                       asp-route-page="@pageNumber"
+                       asp-route-search="@search"
+                       asp-route-courseId="@courseId"
+                       asp-route-status="@selectedStatus"
+                       asp-route-fileType="@selectedFileType">@pageNumber</a>
+                }
+            </nav>
+        }
+    }
+</section>
+
+</div>

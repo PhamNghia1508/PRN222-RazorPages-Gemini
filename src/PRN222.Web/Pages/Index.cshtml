@@ -1,0 +1,998 @@
+@page "/"
+@using PRN222.Web.Infrastructure
+@using PRN222.BLL.DTOs
+@model PRN222.Web.Pages.IndexModel
+@Html.AntiForgeryToken()
+@{
+    ViewData["Title"] = "Tổng quan";
+    var hasIndexedDocuments = Model.Dashboard.IndexedDocuments > 0;
+    var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var canOperateModels = User.IsInRole(ApplicationRoles.Admin)
+        || User.IsInRole(ApplicationRoles.HeadLecturer);
+
+    string StatusText(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "indexed" => "Đã index",
+            "completed" => "Đã index",
+            "uploaded" => "Chờ xử lý",
+            "processing" => "Đang xử lý",
+            "failed" => "Lỗi",
+            _ => status ?? "Chưa rõ"
+        };
+    }
+
+    string StatusClass(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "indexed" => "status-indexed",
+            "completed" => "status-indexed",
+            "processing" => "status-processing",
+            "failed" => "status-failed",
+            _ => "status-uploaded"
+        };
+    }
+
+    string PipelineStatusText(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "ready" => "Sẵn sàng",
+            "needs input" => "Cần dữ liệu",
+            "waiting" => "Đang chờ",
+            "queued" => "Chờ xử lý",
+            "running" => "Đang chạy",
+            "ready to configure" => "Sẵn sàng cấu hình",
+            _ => status ?? "Chưa rõ"
+        };
+    }
+}
+
+<section class="ops-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Bảng điều khiển giảng viên</span>
+        <h1>Tổng quan hệ thống RAG</h1>
+        <p>Theo dõi độ sẵn sàng của tài liệu, phạm vi môn học, chunk đã index và bước nên làm tiếp trong quy trình demo.</p>
+    </div>
+    <div class="hero-action-stack">
+        @if (canUploadDocuments)
+        {
+            <a asp-page="/Document/Upload" class="btn btn-primary">
+                <i class="bi bi-cloud-upload"></i>
+                <span>Nạp tài liệu</span>
+            </a>
+        }
+        else
+        {
+            <a asp-page="/Document/Index" class="btn btn-primary">
+                <i class="bi bi-database"></i>
+                <span>Xem kho tri thức</span>
+            </a>
+        }
+        <a asp-page="/Chat/New" class="btn btn-outline-primary">
+            <i class="bi bi-chat-dots"></i>
+            <span>Thử Chat RAG</span>
+        </a>
+    </div>
+</section>
+
+<div class="poetic-tabs-container fade-in-up stagger-1">
+    <button type="button" class="poetic-tab-btn active" data-tab-target="rag-system" aria-pressed="true">Hệ thống RAG</button>
+    <button type="button" class="poetic-tab-btn" data-tab-target="student-insights" aria-pressed="false">Trải nghiệm sinh viên</button>
+    <button type="button" class="poetic-tab-btn" data-tab-target="knowledge-curation" aria-pressed="false">
+        Duyệt tri thức &amp; Nhật ký
+        @if (ViewData["UserDepartmentName"] != null)
+        {
+            <span class="badge ms-2" style="background: rgba(166,124,82,0.18); color: var(--accent-color); border: 1px solid rgba(166,124,82,0.3); font-size: 0.72rem; padding: 3px 8px; font-weight: 600; vertical-align: middle;">
+                @ViewData["UserDepartmentName"]
+            </span>
+        }
+    </button>
+</div>
+
+<div id="rag-system" class="poetic-tab-content active">
+<div id="dashboardRealtimeWorkspace"
+     data-refresh-url="@Url.Page("/Index")"
+     aria-live="polite">
+@if (!hasIndexedDocuments)
+{
+    <div class="inline-alert inline-alert-danger fade-in-up stagger-1" data-dashboard-missing-documents-alert>
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>@(canOperateModels ? "Chưa có tài liệu indexed. Chat RAG và benchmark sẽ chưa có nguồn truy xuất đáng tin cậy." : "Chưa có tài liệu indexed. Chat RAG sẽ chưa có nguồn truy xuất đáng tin cậy.")</span>
+    </div>
+}
+
+<section class="metric-grid fade-in-up stagger-1">
+    <article class="metric-card">
+        <span>Tài liệu</span>
+        <strong data-dashboard-total-documents>@Model.Dashboard.TotalDocuments</strong>
+        <small><span data-dashboard-indexed-documents>@Model.Dashboard.IndexedDocuments</span> đã index</small>
+    </article>
+    <article class="metric-card">
+        <span>Indexed chunks</span>
+        <strong data-dashboard-indexed-chunks>@Model.Dashboard.IndexedChunks</strong>
+        <small>Sẵn sàng cho retrieval</small>
+    </article>
+    <article class="metric-card">
+        <span>Môn học</span>
+        <strong>@Model.Dashboard.TotalCourses</strong>
+        <small>Phạm vi tri thức</small>
+    </article>
+    @if (canOperateModels)
+    {
+    <article class="metric-card">
+        <span>Benchmark</span>
+        <strong data-dashboard-evaluation-status>@Model.Dashboard.EvaluationStatus</strong>
+        <small>Trạng thái đánh giá RAG</small>
+    </article>
+    }
+</section>
+
+<section class="dashboard-grid fade-in-up stagger-2">
+    <div class="dashboard-main">
+        <article class="workspace-panel">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Pipeline</span>
+                    <h2>Độ sẵn sàng RAG</h2>
+                    <p>Luồng từ tài liệu nguồn đến Chat RAG và benchmark.</p>
+                </div>
+            </div>
+            <div class="pipeline-steps">
+                @foreach (var step in Model.Dashboard.PipelineSteps)
+                {
+                    <div class="pipeline-step pipeline-@step.Status.ToLowerInvariant().Replace(" ", "-")" data-dashboard-pipeline-step="@step.Key">
+                        <span class="pipeline-icon"><i class="@step.IconCssClass"></i></span>
+                        <strong>@step.Label</strong>
+                        <small>@step.Description</small>
+                        <em data-pipeline-status-text>@PipelineStatusText(step.Status)</em>
+                    </div>
+                }
+            </div>
+        </article>
+
+        <article class="workspace-panel" data-dashboard-recent-panel>
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Kho tri thức</span>
+                    <h2>Tài liệu gần đây</h2>
+                    <p>Những file vừa được nạp hoặc xử lý trong hệ thống.</p>
+                </div>
+                <a asp-page="/Document/Index" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-database"></i>
+                    <span>Xem tất cả</span>
+                </a>
+            </div>
+
+            @if (Model.Dashboard.RecentDocuments.Any())
+            {
+                <div class="table-responsive table-shell">
+                    <table class="table ops-table">
+                        <thead>
+                            <tr>
+                                <th>File</th>
+                                <th>Môn học</th>
+                                <th>Chunks</th>
+                                <th>Trạng thái</th>
+                                <th>Ngày nạp</th>
+                            </tr>
+                        </thead>
+                        <tbody data-dashboard-recent-documents>
+                            @foreach (var doc in Model.Dashboard.RecentDocuments)
+                            {
+                                <tr data-document-id="@doc.Id" data-document-status="@doc.Status" data-document-chunk-count="@doc.ChunkCount">
+                                    <td><a asp-page="/Document/Details" asp-route-id="@doc.Id">@doc.OriginalFileName</a></td>
+                                    <td>@doc.CourseName</td>
+                                    <td class="text-mono" data-document-chunk-cell>@doc.ChunkCount</td>
+                                    <td><span class="status-badge @StatusClass(doc.Status)" data-document-status-badge>@StatusText(doc.Status)</span></td>
+                                    <td data-document-date-cell>@doc.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="empty-state compact" data-dashboard-empty-documents>
+                    <i class="bi bi-database"></i>
+                    <h3>Chưa có tài liệu nào</h3>
+                    @if (canUploadDocuments)
+                    {
+                        <p>Nạp PDF, DOCX hoặc slide bài giảng để bắt đầu xây dựng kho tri thức.</p>
+                        <a asp-page="/Document/Upload" class="btn btn-primary">
+                            <i class="bi bi-cloud-upload"></i>
+                            <span>Nạp tài liệu đầu tiên</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <p>Kho tri thức chưa có dữ liệu. Chỉ Admin hoặc Trưởng bộ môn mới được nạp tài liệu nguồn.</p>
+                    }
+                </div>
+            }
+        </article>
+    </div>
+
+    <aside class="dashboard-side">
+        <article class="workspace-panel">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Việc nên làm</span>
+                    <h2>Gợi ý tiếp theo</h2>
+                    <p>Dựa trên trạng thái dữ liệu hiện tại.</p>
+                </div>
+            </div>
+            <div class="action-list">
+                @foreach (var action in Model.Dashboard.NextActions)
+                {
+                    var isUploadAction = string.Equals(action.PagePath, "/Document/Upload", StringComparison.OrdinalIgnoreCase);
+                    if (isUploadAction && !canUploadDocuments)
+                    {
+                        <div class="action-item disabled-action" aria-disabled="true">
+                            <i class="bi bi-lock"></i>
+                            <span>
+                                <strong>@action.Label</strong>
+                                <small>Cần quyền Admin hoặc Trưởng bộ môn để nạp tài liệu.</small>
+                            </span>
+                        </div>
+                    }
+                    else if (action.IsEnabled)
+                    {
+                        <a asp-page="@action.PagePath" class="action-item">
+                            <i class="@action.IconCssClass"></i>
+                            <span>
+                                <strong>@action.Label</strong>
+                                <small>@action.Description</small>
+                            </span>
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="action-item disabled-action" aria-disabled="true">
+                            <i class="@action.IconCssClass"></i>
+                            <span>
+                                <strong>@action.Label</strong>
+                                <small>@action.Description</small>
+                            </span>
+                        </div>
+                    }
+                }
+            </div>
+        </article>
+    </aside>
+</section>
+</div>
+
+<!-- Tab 2: Trải nghiệm sinh viên (Student Insights) -->
+<div id="student-insights" class="poetic-tab-content">
+    @{
+        var studentAnalytics = Model.StudentAnalytics;
+    }
+    @if (studentAnalytics != null)
+    {
+        <section class="metric-grid fade-in-up stagger-1" style="margin-bottom: 24px;">
+            <article class="metric-card">
+                <span>Tổng số câu hỏi</span>
+                <strong>@studentAnalytics.TotalQueries</strong>
+                <small>Đã hỏi qua RAG Chat</small>
+            </article>
+            <article class="metric-card">
+                <span>Tỷ lệ hữu ích</span>
+                <strong>@((studentAnalytics.HelpfulnessRate * 100).ToString("F0"))%</strong>
+                <small>Được sinh viên đánh giá tốt</small>
+            </article>
+            <article class="metric-card">
+                <span>Độ tin cậy trung bình</span>
+                <strong>@((studentAnalytics.AvgConfidenceScore * 100).ToString("F0"))%</strong>
+                <small>Điểm trung bình của mô hình</small>
+            </article>
+        </section>
+
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+            <article class="workspace-panel fade-in-up stagger-2">
+                <div class="workspace-panel-header">
+                    <div>
+                        <span class="section-kicker">Đánh giá chất lượng</span>
+                        <h2>Câu hỏi độ tin cậy thấp hoặc không hữu ích</h2>
+                        <p>Danh sách câu hỏi cần rà soát lại để bổ sung tài liệu hoặc điều chỉnh prompt (tối đa 15 câu hỏi).</p>
+                    </div>
+                </div>
+
+                @if (studentAnalytics.FailedQueries.Any())
+                {
+                    <div class="table-responsive table-shell">
+                        <table class="table ops-table">
+                            <thead>
+                                <tr>
+                                    <th>Câu hỏi</th>
+                                    <th>Phản hồi</th>
+                                    <th>Độ tin cậy</th>
+                                    <th>Đánh giá</th>
+                                    <th>Môn học</th>
+                                    <th>Thời gian</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var query in studentAnalytics.FailedQueries.Take(15))
+                                {
+                                    <tr>
+                                        <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="@query.Question">
+                                            @query.Question
+                                        </td>
+                                        <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="@(query.Answer ?? "")">
+                                            @(query.Answer ?? "-")
+                                        </td>
+                                        <td class="text-mono">
+                                            @(query.ConfidenceScore.HasValue ? $"{(query.ConfidenceScore.Value * 100):F0}%" : "-")
+                                        </td>
+                                        <td>
+                                            @if (query.IsHelpful == true)
+                                            {
+                                                <i class="ph-fill ph-thumbs-up text-success" title="Hữu ích" style="font-size: 1.2rem; color: #2e7d32;"></i>
+                                            }
+                                            else if (query.IsHelpful == false)
+                                            {
+                                                <i class="ph-fill ph-thumbs-down text-danger" title="Không hữu ích" style="font-size: 1.2rem; color: #c62828;"></i>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                        <td>@query.CourseName</td>
+                                        <td>@query.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-primary btn-propose-fix"
+                                                    data-message-id="@query.MessageId"
+                                                    data-course-id="@(query.CourseId ?? 0)"
+                                                    data-question="@query.Question"
+                                                    data-answer="@(query.Answer ?? "")">
+                                                <i class="bi bi-patch-check"></i> Vá tri thức
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state compact">
+                        <i class="bi bi-check-circle" style="color: #2e7d32; font-size: 2rem;"></i>
+                        <h3>Tuyệt vời! Không có câu hỏi nào bị đánh giá thấp</h3>
+                        <p>Tất cả các câu hỏi của sinh viên đều đạt độ tin cậy cao và hữu ích.</p>
+                    </div>
+                }
+            </article>
+
+            <article class="workspace-panel fade-in-up stagger-2">
+                <div class="workspace-panel-header">
+                    <div>
+                        <span class="section-kicker">Mức độ sử dụng</span>
+                        <h2>Tài liệu được trích dẫn nhiều nhất</h2>
+                        <p>Các tài liệu nguồn đóng vai trò quan trọng trong việc trả lời câu hỏi của sinh viên.</p>
+                    </div>
+                </div>
+
+                @if (studentAnalytics.TopCitedDocuments.Any())
+                {
+                    <div class="table-responsive table-shell">
+                        <table class="table ops-table">
+                            <thead>
+                                <tr>
+                                    <th>Tên tài liệu</th>
+                                    <th>Môn học</th>
+                                    <th>Số lần trích dẫn</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var doc in studentAnalytics.TopCitedDocuments)
+                                {
+                                    <tr>
+                                        <td>@doc.DocumentName</td>
+                                        <td>@doc.CourseName</td>
+                                        <td class="text-mono">@doc.CitationCount</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="empty-state compact">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <h3>Chưa có tài liệu nào được trích dẫn</h3>
+                        <p>Thống kê trích dẫn sẽ hiển thị sau khi hệ thống RAG phục vụ các câu hỏi của sinh viên.</p>
+                    </div>
+                }
+            </article>
+        </div>
+    }
+    else
+    {
+        <div class="empty-state compact">
+            <i class="bi bi-bar-chart"></i>
+            <h3>Chưa có dữ liệu thống kê trải nghiệm sinh viên</h3>
+            <p>Thống kê sẽ được cập nhật sau khi sinh viên thực hiện hỏi đáp.</p>
+        </div>
+    }
+</div>
+
+<!-- Tab 3: Duyệt tri thức & Nhật ký (Knowledge Curation) -->
+<div id="knowledge-curation" class="poetic-tab-content">
+    @if (User.IsInRole(ApplicationRoles.Admin) || User.IsInRole(ApplicationRoles.HeadLecturer))
+    {
+        var pendingProposals = Model.PendingProposals;
+        var auditHistory = Model.AuditHistory;
+
+        @* Dept warning for HeadLecturer without assignment *@
+        @if (User.IsInRole(ApplicationRoles.HeadLecturer) && ViewData["UserDepartmentId"] == null)
+        {
+            <div class="alert alert-warning fade-in-up stagger-1 mb-4" role="alert" style="border-left: 4px solid #f39c12;">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <strong>⚠️ Bạn chưa được phân công vào Khoa nào.</strong> Liên hệ Admin để được phân công vào Khoa trước khi duyệt tri thức.
+            </div>
+        }
+
+        <article class="workspace-panel fade-in-up stagger-1 mb-4">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Xét duyệt</span>
+                    <h2>Đề xuất vá tri thức đang chờ duyệt</h2>
+                    <p>Danh sách các câu hỏi do giảng viên đề xuất bổ sung vào kho tri thức RAG.</p>
+                </div>
+            </div>
+
+            @if (pendingProposals != null && pendingProposals.Any())
+            {
+                <div class="table-responsive table-shell">
+                    <table class="table ops-table">
+                        <thead>
+                            <tr>
+                                <th>Môn học</th>
+                                <th>Khoa</th>
+                                <th>Người đề xuất</th>
+                                <th>Câu hỏi</th>
+                                <th>Câu trả lời đề xuất</th>
+                                <th>Ngày đề xuất</th>
+                                <th style="width: 180px;">Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in pendingProposals)
+                            {
+                                <tr>
+                                    <td>@log.CourseName</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(log.DepartmentName))
+                                        {
+                                            <span class="badge" style="background: rgba(166,124,82,0.12); color: var(--accent-color); border: 1px solid rgba(166,124,82,0.2); font-size: 0.75rem;">@log.DepartmentName</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" style="font-size: 0.85rem;">—</span>
+                                        }
+                                    </td>
+                                    <td>@log.UpdatedByUserEmail</td>
+                                    <td style="max-width: 200px; white-space: pre-wrap; font-size: 0.9rem;">@log.TriggeredQuestion</td>
+                                    <td style="max-width: 250px; white-space: pre-wrap; font-size: 0.9rem;">@log.SuggestedAnswer</td>
+                                    <td>@log.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-success me-1 btn-approve" data-id="@log.Id">
+                                            <i class="bi bi-check2"></i> Duyệt
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-danger btn-reject-trigger" data-id="@log.Id">
+                                            <i class="bi bi-x"></i> Từ chối
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="empty-state compact">
+                    <i class="bi bi-patch-check" style="color: #2e7d32; font-size: 2rem;"></i>
+                    <h3>Không có đề xuất nào đang chờ duyệt</h3>
+                    <p>Mọi đề xuất vá tri thức đều đã được xử lý.</p>
+                </div>
+            }
+        </article>
+
+        <article class="workspace-panel fade-in-up stagger-2">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Nhật ký</span>
+                    <h2>Lịch sử duyệt & vá tri thức</h2>
+                    <p>Lịch sử hoạt động tự chữa lành (Self-Healing RAG) đã được phê duyệt hoặc từ chối.</p>
+                </div>
+            </div>
+
+            @if (auditHistory != null && auditHistory.Any())
+            {
+                <div class="table-responsive table-shell">
+                    <table class="table ops-table">
+                        <thead>
+                            <tr>
+                                <th>Môn học</th>
+                                <th>Người đề xuất</th>
+                                <th>Câu hỏi & Trả lời</th>
+                                <th>Trạng thái</th>
+                                <th>Người duyệt</th>
+                                <th>Ngày duyệt</th>
+                                <th>Lý do từ chối / Chunk ID</th>
+                                <th>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in auditHistory)
+                            {
+                                var isApproved = log.Status == "Approved";
+                                <tr>
+                                    <td>@log.CourseName</td>
+                                    <td>@log.UpdatedByUserEmail</td>
+                                    <td style="max-width: 250px; font-size: 0.85rem;">
+                                        <strong>Q:</strong> @log.TriggeredQuestion<br/>
+                                        <strong>A:</strong> @log.SuggestedAnswer
+                                    </td>
+                                    <td>
+                                        <span class="badge @(isApproved ? "bg-success" : "bg-danger")">
+                                            @(isApproved ? "Đã duyệt" : "Từ chối")
+                                        </span>
+                                    </td>
+                                    <td>@(log.ApprovedByUserEmail ?? "-")</td>
+                                    <td>@(log.UpdatedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "-")</td>
+                                    <td style="max-width: 180px; font-size: 0.85rem;">
+                                        @if (isApproved)
+                                        {
+                                            <span class="text-muted text-mono">Chunk #@log.CreatedChunkId</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-danger">@log.RejectionReason</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (isApproved && log.CreatedChunkId.HasValue)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-rollback" data-id="@log.Id">
+                                                <i class="bi bi-arrow-counterclockwise"></i> Thu hồi
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="empty-state compact">
+                    <i class="bi bi-clock-history"></i>
+                    <h3>Chưa có nhật ký hoạt động</h3>
+                    <p>Nhật ký phê duyệt sẽ xuất hiện tại đây sau khi có các hoạt động duyệt hoặc từ chối tri thức.</p>
+                </div>
+            }
+        </article>
+    }
+    else if (User.IsInRole(ApplicationRoles.Lecturer))
+    {
+        var myProposals = Model.MyProposals;
+
+        <article class="workspace-panel fade-in-up stagger-1">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Cá nhân</span>
+                    <h2>Đề xuất vá tri thức của tôi</h2>
+                    <p>Danh sách đề xuất vá lỗi chatbot do bạn gửi lên hệ thống.</p>
+                </div>
+            </div>
+
+            @if (myProposals != null && myProposals.Any())
+            {
+                <div class="table-responsive table-shell">
+                    <table class="table ops-table">
+                        <thead>
+                            <tr>
+                                <th>Môn học</th>
+                                <th>Câu hỏi</th>
+                                <th>Câu trả lời đề xuất</th>
+                                <th>Ngày đề xuất</th>
+                                <th>Trạng thái</th>
+                                <th>Lưu ý từ người duyệt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var log in myProposals)
+                            {
+                                string statusBadgeClass = log.Status switch
+                                {
+                                    "Approved" => "bg-success",
+                                    "Rejected" => "bg-danger",
+                                    _ => "bg-warning text-dark"
+                                };
+                                string statusText = log.Status switch
+                                {
+                                    "Approved" => "Đã duyệt",
+                                    "Rejected" => "Từ chối",
+                                    _ => "Chờ duyệt"
+                                };
+
+                                <tr>
+                                    <td>@log.CourseName</td>
+                                    <td style="max-width: 250px; white-space: pre-wrap; font-size: 0.9rem;">@log.TriggeredQuestion</td>
+                                    <td style="max-width: 300px; white-space: pre-wrap; font-size: 0.9rem;">@log.SuggestedAnswer</td>
+                                    <td>@log.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>
+                                        <span class="badge @statusBadgeClass">@statusText</span>
+                                    </td>
+                                    <td style="max-width: 200px; font-size: 0.85rem;">
+                                        @if (log.Status == "Approved")
+                                        {
+                                            <span class="text-success"><i class="bi bi-check-circle"></i> Đã vá vào Chunk #@log.CreatedChunkId</span>
+                                        }
+                                        else if (log.Status == "Rejected")
+                                        {
+                                            <span class="text-danger">Lý do: @log.RejectionReason</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="empty-state compact">
+                    <i class="bi bi-chat-left-text"></i>
+                    <h3>Bạn chưa gửi đề xuất nào</h3>
+                    <p>Nhấp vào "Vá tri thức" ở tab "Trải nghiệm sinh viên" khi có câu hỏi độ tin cậy thấp để đề xuất câu trả lời chính xác.</p>
+                </div>
+            }
+        </article>
+    }
+</div>
+
+<!-- Modal Vá Tri Thức (Propose Correction) -->
+<div class="modal fade" id="proposeFixModal" tabindex="-1" aria-labelledby="proposeFixModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <span class="section-kicker">Tri thức hệ thống</span>
+                    <h5 class="modal-title" id="proposeFixModalLabel">Đề xuất vá tri thức Chatbot</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="proposeMessageId">
+                <input type="hidden" id="proposeCourseId">
+                <div class="mb-3">
+                    <label class="form-label font-weight-bold">Câu hỏi của sinh viên</label>
+                    <div class="p-3 bg-light rounded text-muted" id="proposeQuestionText" style="white-space: pre-wrap; font-size: 0.95rem;"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label font-weight-bold">Phản hồi hiện tại của Chatbot</label>
+                    <div class="p-3 bg-light rounded text-muted" id="proposeAnswerText" style="white-space: pre-wrap; font-size: 0.95rem; max-height: 150px; overflow-y: auto;"></div>
+                </div>
+                <div class="mb-3">
+                    <label for="suggestedCorrectionAnswer" class="form-label font-weight-bold">Câu trả lời đề xuất <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="suggestedCorrectionAnswer" rows="5" placeholder="Nhập câu trả lời chính xác, giải thích bổ sung hoặc lưu ý bổ sung từ giảng viên..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" id="submitProposalBtn">
+                    <i class="bi bi-check2-circle"></i> Gửi đề xuất
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Từ Chối Đề Xuất (Reject Proposal) -->
+<div class="modal fade" id="rejectProposalModal" tabindex="-1" aria-labelledby="rejectProposalModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <span class="section-kicker">Xét duyệt tri thức</span>
+                    <h5 class="modal-title" id="rejectProposalModalLabel">Từ chối đề xuất vá tri thức</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rejectLogId">
+                <div class="mb-3">
+                    <label for="rejectionReasonInput" class="form-label font-weight-bold">Lý do từ chối <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejectionReasonInput" rows="4" placeholder="Nhập lý do từ chối để giảng viên điều chỉnh lại đề xuất..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-danger" id="submitRejectionBtn">
+                    <i class="bi bi-x-circle"></i> Từ chối
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/governance.js" asp-append-version="true"></script>
+    <script>
+        function activateDashboardTab(tabId) {
+            if (!tabId) {
+                return;
+            }
+
+            document.querySelectorAll('.poetic-tab-content').forEach(function (element) {
+                element.classList.toggle('active', element.id === tabId);
+            });
+
+            document.querySelectorAll('.poetic-tab-btn[data-tab-target]').forEach(function (button) {
+                const isActive = button.dataset.tabTarget === tabId;
+                button.classList.toggle('active', isActive);
+                button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            });
+
+            window.sessionStorage.setItem('homeDashboardActiveTab', tabId);
+        }
+
+        function getActiveDashboardTabId() {
+            return document.querySelector('.poetic-tab-content.active')?.id || 'rag-system';
+        }
+
+        function showDashboardToast(message, isError, title) {
+            if (window.GovernancePage?.showStatusToast) {
+                window.GovernancePage.showStatusToast({
+                    title: title || (isError ? 'Không thể thực hiện' : 'Đã cập nhật'),
+                    message: message,
+                    tone: isError ? 'error' : 'success'
+                });
+                return;
+            }
+
+            console[isError ? 'error' : 'log'](message);
+        }
+
+        function confirmDashboardAction(options) {
+            return new Promise(function (resolve) {
+                if (!window.GovernancePage?.showGovernanceConfirmToast) {
+                    resolve(true);
+                    return;
+                }
+
+                window.GovernancePage.showGovernanceConfirmToast({
+                    title: options.title,
+                    message: options.message,
+                    actionLabel: options.actionLabel,
+                    onConfirm: function () {
+                        resolve(true);
+                    },
+                    onCancel: function () {
+                        resolve(false);
+                    }
+                });
+            });
+        }
+
+        function getRequestVerificationToken() {
+            return $('input[name="__RequestVerificationToken"]').val();
+        }
+
+        function markDashboardActionUpdated() {
+            window.sessionStorage.setItem('homeDashboardActiveTab', getActiveDashboardTabId());
+        }
+
+        function handleKnowledgeActionResponse(response, options) {
+            if (response.success) {
+                if (options.modalId) {
+                    const modalElement = document.getElementById(options.modalId);
+                    bootstrap.Modal.getInstance(modalElement)?.hide();
+                }
+
+                showDashboardToast(response.message, false, options.successTitle);
+
+                if (options.reload !== false) {
+                    markDashboardActionUpdated();
+                }
+
+                return;
+            }
+
+            showDashboardToast(response.message || options.fallbackErrorMessage, true, options.errorTitle);
+        }
+
+        $(document).ready(function () {
+            activateDashboardTab(window.sessionStorage.getItem('homeDashboardActiveTab') || getActiveDashboardTabId());
+
+            $('.poetic-tab-btn[data-tab-target]').on('click', function () {
+                activateDashboardTab($(this).data('tab-target'));
+            });
+
+            // Open Propose Fix modal
+            $('.btn-propose-fix').on('click', function () {
+                const messageId = $(this).data('message-id');
+                const courseId = $(this).data('course-id');
+                const question = $(this).data('question');
+                const answer = $(this).data('answer');
+
+                $('#proposeMessageId').val(messageId);
+                $('#proposeCourseId').val(courseId);
+                $('#proposeQuestionText').text(question);
+                $('#proposeAnswerText').text(answer || '-');
+                $('#suggestedCorrectionAnswer').val('');
+
+                const modal = new bootstrap.Modal(document.getElementById('proposeFixModal'));
+                modal.show();
+            });
+
+            // Submit Propose Fix
+            $('#submitProposalBtn').on('click', function () {
+                const messageId = parseInt($('#proposeMessageId').val()) || null;
+                const courseId = parseInt($('#proposeCourseId').val()) || 0;
+                const question = $('#proposeQuestionText').text();
+                const answer = $('#suggestedCorrectionAnswer').val();
+
+                if (!answer || answer.trim() === '') {
+                    showDashboardToast('Vui lòng nhập câu trả lời đề xuất.', true, 'Thiếu nội dung');
+                    return;
+                }
+
+                $.ajax({
+                    url: '/Knowledge?handler=Propose',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'RequestVerificationToken': getRequestVerificationToken()
+                    },
+                    data: JSON.stringify({
+                        CourseId: courseId,
+                        MessageId: messageId,
+                        TriggeredQuestion: question,
+                        SuggestedAnswer: answer
+                    }),
+                    success: function (res) {
+                        handleKnowledgeActionResponse(res, {
+                            modalId: 'proposeFixModal',
+                            successTitle: 'Đã gửi đề xuất',
+                            errorTitle: 'Gửi đề xuất thất bại',
+                            fallbackErrorMessage: 'Không thể gửi đề xuất lúc này.'
+                        });
+                    },
+                    error: function () {
+                        showDashboardToast('Đã xảy ra lỗi khi gửi đề xuất.', true, 'Gửi đề xuất thất bại');
+                    }
+                });
+            });
+
+            // Approve proposal
+            $('.btn-approve').on('click', async function () {
+                const logId = $(this).data('id');
+
+                const shouldApprove = await confirmDashboardAction({
+                    title: 'Xác nhận phê duyệt đề xuất',
+                    message: 'Phê duyệt sẽ tạo chunk tri thức mới và cập nhật vector embeddings cho hệ thống.',
+                    actionLabel: 'Phê duyệt'
+                });
+
+                if (!shouldApprove) {
+                    return;
+                }
+
+                $.ajax({
+                    url: '/Knowledge?handler=Approve',
+                    type: 'POST',
+                    data: { logId: logId },
+                    headers: {
+                        'RequestVerificationToken': getRequestVerificationToken()
+                    },
+                    success: function (res) {
+                        handleKnowledgeActionResponse(res, {
+                            successTitle: 'Đã phê duyệt',
+                            errorTitle: 'Duyệt đề xuất thất bại',
+                            fallbackErrorMessage: 'Không thể duyệt đề xuất lúc này.'
+                        });
+                    },
+                    error: function () {
+                        showDashboardToast('Đã xảy ra lỗi khi duyệt đề xuất.', true, 'Duyệt đề xuất thất bại');
+                    }
+                });
+            });
+
+            // Open Reject modal
+            $('.btn-reject-trigger').on('click', function () {
+                const logId = $(this).data('id');
+                $('#rejectLogId').val(logId);
+                $('#rejectionReasonInput').val('');
+
+                const modal = new bootstrap.Modal(document.getElementById('rejectProposalModal'));
+                modal.show();
+            });
+
+            // Submit Reject proposal
+            $('#submitRejectionBtn').on('click', function () {
+                const logId = $('#rejectLogId').val();
+                const reason = $('#rejectionReasonInput').val();
+
+                if (!reason || reason.trim() === '') {
+                    showDashboardToast('Vui lòng nhập lý do từ chối.', true, 'Thiếu lý do');
+                    return;
+                }
+
+                $.ajax({
+                    url: '/Knowledge?handler=Reject',
+                    type: 'POST',
+                    data: { logId: logId, reason: reason },
+                    headers: {
+                        'RequestVerificationToken': getRequestVerificationToken()
+                    },
+                    success: function (res) {
+                        handleKnowledgeActionResponse(res, {
+                            modalId: 'rejectProposalModal',
+                            successTitle: 'Đã từ chối đề xuất',
+                            errorTitle: 'Từ chối đề xuất thất bại',
+                            fallbackErrorMessage: 'Không thể từ chối đề xuất lúc này.'
+                        });
+                    },
+                    error: function () {
+                        showDashboardToast('Đã xảy ra lỗi khi từ chối đề xuất.', true, 'Từ chối đề xuất thất bại');
+                    }
+                });
+            });
+
+            // Rollback proposal
+            $('.btn-rollback').on('click', async function () {
+                const logId = $(this).data('id');
+
+                const shouldRollback = await confirmDashboardAction({
+                    title: 'Xác nhận thu hồi tri thức',
+                    message: 'Thu hồi sẽ xóa chunk tri thức và vector embeddings liên quan khỏi kho tri thức.',
+                    actionLabel: 'Thu hồi'
+                });
+
+                if (!shouldRollback) {
+                    return;
+                }
+
+                $.ajax({
+                    url: '/Knowledge?handler=Rollback',
+                    type: 'POST',
+                    data: { logId: logId },
+                    headers: {
+                        'RequestVerificationToken': getRequestVerificationToken()
+                    },
+                    success: function (res) {
+                        handleKnowledgeActionResponse(res, {
+                            successTitle: 'Đã thu hồi tri thức',
+                            errorTitle: 'Thu hồi tri thức thất bại',
+                            fallbackErrorMessage: 'Không thể thu hồi tri thức lúc này.'
+                        });
+                    },
+                    error: function () {
+                        showDashboardToast('Đã xảy ra lỗi khi thu hồi tri thức.', true, 'Thu hồi tri thức thất bại');
+                    }
+                });
+            });
+        });
+    </script>
+}

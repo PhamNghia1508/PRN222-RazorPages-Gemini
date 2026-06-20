@@ -1,0 +1,294 @@
+@page "/Department"
+@model PRN222.Web.Pages.Department.IndexModel
+@{
+    ViewData["Title"] = "Nhân sự & Khoa";
+    var selectedDepartment = Model.SelectedDepartment;
+    var selectedDepartmentId = Model.SelectedDepartmentId;
+    var selectedStaff = selectedDepartmentId.HasValue
+        ? Model.Staff.Where(staff => staff.DepartmentId == selectedDepartmentId.Value).ToList()
+        : Model.Staff.Take(0).ToList();
+    var selectedHeadLecturers = selectedStaff.Where(staff => staff.IsHeadLecturer).ToList();
+    var availableStaff = selectedDepartmentId.HasValue
+        ? Model.Staff.Where(staff => staff.DepartmentId != selectedDepartmentId.Value).ToList()
+        : Model.Staff.Take(0).ToList();
+    var selectedCourses = selectedDepartmentId.HasValue
+        ? Model.Courses.Where(course => course.DepartmentId == selectedDepartmentId.Value).ToList()
+        : Model.Courses.Take(0).ToList();
+    var availableCourses = selectedDepartmentId.HasValue
+        ? Model.Courses.Where(course => course.DepartmentId != selectedDepartmentId.Value).ToList()
+        : Model.Courses.Take(0).ToList();
+}
+
+<div class="js-governance-root" data-governance-page="department">
+    <section class="ops-hero fade-in-up">
+        <div>
+            <span class="section-kicker">Admin workspace</span>
+            <h1>Khoa và phạm vi môn học</h1>
+            <p>Mỗi giảng viên thuộc một Khoa; trưởng bộ môn chỉ upload tài liệu cho các môn thuộc Khoa được phân công.</p>
+        </div>
+    </section>
+
+    @await Html.PartialAsync("_StaffGovernanceTabs")
+
+    <div class="js-governance-flash">
+        @if (TempData["Success"] != null)
+        {
+            <div class="inline-alert inline-alert-success fade-in-up" role="status">
+                <i class="bi bi-check-circle"></i>
+                <span>@TempData["Success"]</span>
+            </div>
+        }
+        @if (TempData["Error"] != null)
+        {
+            <div class="inline-alert inline-alert-danger fade-in-up" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>@TempData["Error"]</span>
+            </div>
+        }
+    </div>
+
+    <article class="workspace-panel fade-in-up stagger-1 mb-4">
+        <div class="workspace-panel-header">
+            <div>
+                <span class="section-kicker">Tạo mới</span>
+                <h2>Tạo Khoa</h2>
+                <p>Khoa là ranh giới để kiểm soát môn học, tài liệu và tài khoản giảng viên.</p>
+            </div>
+        </div>
+        <form asp-page-handler="Create" method="post" class="course-form governance-department-create-form">
+            @Html.AntiForgeryToken()
+            <div class="course-field">
+                <label for="Name">Tên Khoa</label>
+                <input id="Name" type="text" name="Name" class="form-control" placeholder="VD: Khoa Công nghệ thông tin" maxlength="200" required />
+            </div>
+            <div class="course-field">
+                <label for="Code">Mã Khoa</label>
+                <input id="Code" type="text" name="Code" class="form-control" placeholder="VD: CNTT" maxlength="20" required />
+            </div>
+            <div class="course-field">
+                <label for="Description">Mô tả</label>
+                <input id="Description" type="text" name="Description" class="form-control" placeholder="Mô tả ngắn về Khoa" />
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i>
+                <span>Tạo Khoa</span>
+            </button>
+        </form>
+    </article>
+
+    @if (!Model.Departments.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-building"></i>
+            <h3>Chưa có Khoa nào</h3>
+            <p>Tạo Khoa đầu tiên để bắt đầu gán giảng viên và môn học.</p>
+        </div>
+    }
+    else
+    {
+        <section class="governance-master-detail fade-in-up stagger-2">
+            <aside class="workspace-panel governance-department-list" aria-label="Danh sách Khoa">
+                <div class="workspace-panel-header">
+                    <div>
+                        <span class="section-kicker">Khoa</span>
+                        <h2>Chọn phạm vi</h2>
+                    </div>
+                </div>
+                <div class="governance-department-items">
+                    @foreach (var department in Model.Departments)
+                    {
+                        <a class="governance-department-item @(department.Id == selectedDepartmentId ? "active" : "")"
+                           aria-current="@(department.Id == selectedDepartmentId ? "true" : null)"
+                           asp-page="/Department/Index"
+                           asp-route-departmentId="@department.Id">
+                            <span>
+                                <strong>@department.Name</strong>
+                                <small>@department.Code</small>
+                            </span>
+                            <span class="governance-department-counts">
+                                <span><i class="bi bi-people"></i> @department.UserCount</span>
+                                <span><i class="bi bi-journal-bookmark"></i> @department.CourseCount</span>
+                            </span>
+                        </a>
+                    }
+                </div>
+            </aside>
+
+            <article class="workspace-panel governance-detail">
+                @if (selectedDepartment is null)
+                {
+                    <div class="empty-state compact">
+                        <i class="bi bi-building"></i>
+                        <h3>Chọn một Khoa</h3>
+                        <p>Chọn Khoa bên trái để xem giảng viên, môn học và các cấu hình cần xử lý.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="workspace-panel-header align-items-start">
+                        <div>
+                            <span class="section-kicker">Đang quản lý</span>
+                            <h2>@selectedDepartment.Name</h2>
+                            <p>@(string.IsNullOrWhiteSpace(selectedDepartment.Description) ? "Chưa có mô tả." : selectedDepartment.Description)</p>
+                        </div>
+                        <span class="governance-status is-valid">@selectedDepartment.Code</span>
+                    </div>
+
+                    <div class="governance-detail-grid">
+                        <section>
+                            <div class="governance-section-head">
+                                <div>
+                                    <span class="section-kicker">Giảng viên</span>
+                                    <h3>@selectedStaff.Count tài khoản</h3>
+                                    <p class="governance-muted-note mb-0">Trưởng bộ môn: @selectedHeadLecturers.Count / 1</p>
+                                </div>
+                            </div>
+
+                            @if (selectedHeadLecturers.Count > 1)
+                            {
+                                <div class="inline-alert inline-alert-danger mb-3" role="alert">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <span>Khoa này đang có @selectedHeadLecturers.Count trưởng bộ môn. Mỗi Khoa chỉ nên có 1 trưởng bộ môn, vui lòng giữ lại 1 người và xóa người còn lại khỏi Khoa.</span>
+                                </div>
+                            }
+
+                            <form asp-page-handler="AssignUser"
+                                  method="post"
+                                  class="governance-inline-form"
+                                  data-governance-ajax="true"
+                                  data-confirm-title="Xác nhận phân công giảng viên"
+                                  data-confirm-action="Phân công"
+                                  data-confirm-message="Chuyển giảng viên sang Khoa này sẽ thu hồi các môn không còn đúng Khoa. Tiếp tục?">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="departmentId" value="@selectedDepartment.Id" />
+                                <select name="userId" class="form-select" required>
+                                    <option value="">Chọn giảng viên cần chuyển vào Khoa</option>
+                                    @foreach (var staff in availableStaff)
+                                    {
+                                        var isBlockedHeadLecturer = selectedHeadLecturers.Any() && staff.IsHeadLecturer;
+                                        <option value="@staff.UserId" disabled="@isBlockedHeadLecturer">
+                                            @staff.Email - @staff.RoleLabel @(string.IsNullOrWhiteSpace(staff.DepartmentName) ? "(chưa có Khoa)" : $"({staff.DepartmentName})")
+                                        </option>
+                                    }
+                                </select>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-person-check"></i>
+                                    <span>Phân công</span>
+                                </button>
+                            </form>
+                            <p class="governance-muted-note">Mỗi Khoa chỉ được có một trưởng bộ môn. Khi Khoa đã có trưởng bộ môn, các tài khoản cùng vai trò sẽ bị khóa ở danh sách chọn.</p>
+
+                            @if (!selectedStaff.Any())
+                            {
+                                <p class="governance-muted-note">Chưa có giảng viên nào trong Khoa này.</p>
+                            }
+                            else
+                            {
+                                <div class="governance-list">
+                                    @foreach (var staff in selectedStaff)
+                                    {
+                                        <div class="governance-list-row">
+                                            <div>
+                                                <strong>@staff.Email</strong>
+                                                <span class="governance-status @(staff.IsHeadLecturer ? "is-warning" : "is-valid")">@staff.RoleLabel</span>
+                                                <small>@staff.AssignedCourseCount môn được gán</small>
+                                                @if (staff.InvalidAssignmentCount > 0)
+                                                {
+                                                    <span class="governance-status is-warning">
+                                                        <i class="bi bi-exclamation-triangle"></i>
+                                                        @staff.InvalidAssignmentCount môn lệch Khoa
+                                                    </span>
+                                                }
+                                            </div>
+                                            <form asp-page-handler="RemoveUser"
+                                                  method="post"
+                                                  data-governance-ajax="true"
+                                                  data-confirm-title="Xác nhận gỡ khỏi Khoa"
+                                                  data-confirm-action="Xóa khỏi Khoa"
+                                                  data-confirm-message="Xóa giảng viên khỏi Khoa sẽ thu hồi toàn bộ môn không còn hợp lệ. Tiếp tục?">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="userId" value="@staff.UserId" />
+                                                <input type="hidden" name="departmentId" value="@selectedDepartment.Id" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-person-dash"></i>
+                                                    <span>Xóa khỏi Khoa</span>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </section>
+
+                        <section>
+                            <div class="governance-section-head">
+                                <div>
+                                    <span class="section-kicker">Môn học</span>
+                                    <h3>@selectedCourses.Count môn</h3>
+                                </div>
+                            </div>
+
+                            <form asp-page-handler="AssignCourse"
+                                  method="post"
+                                  class="governance-inline-form"
+                                  data-governance-ajax="true"
+                                  data-confirm-title="Xác nhận gán môn"
+                                  data-confirm-action="Gán môn"
+                                  data-confirm-message="Chuyển môn sang Khoa này sẽ thu hồi phân công giảng viên không thuộc Khoa. Tiếp tục?">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="departmentId" value="@selectedDepartment.Id" />
+                                <select name="courseId" class="form-select" required>
+                                    <option value="">Chọn môn học cần đưa vào Khoa</option>
+                                    @foreach (var course in availableCourses)
+                                    {
+                                        <option value="@course.CourseId">
+                                            @course.Name @(string.IsNullOrWhiteSpace(course.DepartmentName) ? "(chưa có Khoa)" : $"({course.DepartmentName})")
+                                        </option>
+                                    }
+                                </select>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-journal-check"></i>
+                                    <span>Gán môn</span>
+                                </button>
+                            </form>
+
+                            @if (!selectedCourses.Any())
+                            {
+                                <p class="governance-muted-note">Chưa có môn học nào trong Khoa này.</p>
+                            }
+                            else
+                            {
+                                <div class="governance-list">
+                                    @foreach (var course in selectedCourses)
+                                    {
+                                        <div class="governance-list-row">
+                                            <div>
+                                                <strong>@course.Name</strong>
+                                                <small>@course.AssignedStaffCount tài khoản đang được gán</small>
+                                                @if (course.InvalidAssignmentCount > 0)
+                                                {
+                                                    <span class="governance-status is-warning">
+                                                        <i class="bi bi-exclamation-triangle"></i>
+                                                        @course.InvalidAssignmentCount phân công lệch Khoa
+                                                    </span>
+                                                }
+                                            </div>
+                                            <a asp-page="/Course/Edit" asp-route-id="@course.CourseId" class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-pencil-square"></i>
+                                                <span>Sửa môn</span>
+                                            </a>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </section>
+                    </div>
+                }
+            </article>
+        </section>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/governance.js" asp-append-version="true"></script>
+}

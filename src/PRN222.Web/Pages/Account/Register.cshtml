@@ -1,0 +1,76 @@
+@page "/Account/Register"
+@model PRN222.Web.Pages.Account.RegisterModel
+
+@{
+    ViewData["Title"] = "Dang ky";
+}
+
+<section class="auth-page compact">
+    <div class="auth-copy">
+        <span class="section-kicker">Tai khoan sinh vien</span>
+        <h1>Tao tai khoan de luu lich su hoi dap.</h1>
+        <p>
+            Tai khoan moi se duoc gan role Student va di thang vao man Chat RAG sau khi dang ky.
+        </p>
+    </div>
+
+    <div class="auth-card">
+        <span class="section-kicker">Sinh vien</span>
+        <h2>Dang ky tai khoan</h2>
+        <p class="auth-subtitle">Dung email cua ban va mat khau toi thieu 6 ky tu.</p>
+
+        <form method="post" class="auth-form">
+            <input type="hidden" asp-for="Input.ReturnUrl" />
+            <div asp-validation-summary="ModelOnly" class="inline-alert inline-alert-danger"></div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Email" class="form-label"></label>
+                <div class="auth-input-shell">
+                    <i class="bi bi-envelope"></i>
+                    <input asp-for="Input.Email" class="form-control" autocomplete="username" placeholder="name@example.com" />
+                </div>
+                <span asp-validation-for="Input.Email" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Password" class="form-label"></label>
+                <div class="auth-input-shell">
+                    <i class="bi bi-lock"></i>
+                    <input asp-for="Input.Password" class="form-control" autocomplete="new-password" placeholder="Toi thieu 6 ky tu" />
+                    <button type="button" class="auth-password-toggle" aria-label="Hien mat khau" data-password-toggle>
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </div>
+                <span asp-validation-for="Input.Password" class="text-danger"></span>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 auth-submit">
+                <i class="bi bi-person-plus"></i>
+                <span>Tao tai khoan</span>
+            </button>
+        </form>
+
+        <div class="auth-switch">
+            <span>Da co tai khoan?</span>
+            <a asp-page="/Account/Login" asp-route-returnUrl="@Model.Input.ReturnUrl">Dang nhap</a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const passwordInput = document.getElementById('Input_Password');
+            document.querySelector('[data-password-toggle]')?.addEventListener('click', (event) => {
+                const button = event.currentTarget;
+                const icon = button.querySelector('i');
+                const isPassword = passwordInput.type === 'password';
+
+                passwordInput.type = isPassword ? 'text' : 'password';
+                button.setAttribute('aria-label', isPassword ? 'An mat khau' : 'Hien mat khau');
+                icon.className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
+            });
+        })();
+    </script>
+}

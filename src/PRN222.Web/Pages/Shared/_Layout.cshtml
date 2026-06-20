@@ -1,0 +1,180 @@
+@using PRN222.Web.Infrastructure
+@{
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+    if (currentController is null && !string.IsNullOrWhiteSpace(currentPage))
+    {
+        currentController = currentPage.Equals("/Index", StringComparison.OrdinalIgnoreCase)
+            ? "Home"
+            : currentPage.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+    }
+    var isSignedIn = User.Identity?.IsAuthenticated == true;
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var isHeadLecturer = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var isLecturer = User.IsInRole(ApplicationRoles.Lecturer);
+    var isStudent = User.IsInRole(ApplicationRoles.Student);
+    var isManagementUser = isAdmin || isHeadLecturer || isLecturer;
+    var canUploadDocuments = isHeadLecturer;
+    var canOperateModels = isAdmin || isHeadLecturer;
+    var homeHref = isManagementUser ? "/" : "/Chat/Session";
+    var roleLabel = isAdmin
+        ? "Admin"
+        : isHeadLecturer
+            ? "Trưởng bộ môn"
+            : isLecturer
+                ? "Giảng viên"
+                : isStudent
+                    ? "Sinh viên"
+                    : "Khách";
+
+    string NavClass(string controller)
+    {
+        return string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase)
+            ? "app-nav-link active"
+            : "app-nav-link";
+    }
+
+    var governanceNavActive = string.Equals(currentController, "Admin", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(currentController, "Department", StringComparison.OrdinalIgnoreCase);
+    var governanceNavClass = governanceNavActive ? "app-nav-link active" : "app-nav-link";
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Chatbot Q&A</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=DM+Sans:ital,opsz,wght@0,9..400,100..1000;1,9..400,100..1000&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <script src="https://unpkg.com/@@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/poetic.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/PRN222.Web.styles.css" asp-append-version="true" />
+</head>
+<body data-current-user-id="@User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value"
+      data-current-user-role="@(isAdmin ? ApplicationRoles.Admin : isHeadLecturer ? ApplicationRoles.HeadLecturer : isLecturer ? ApplicationRoles.Lecturer : isStudent ? ApplicationRoles.Student : string.Empty)"
+      data-current-controller="@currentController">
+    <div class="app-shell">
+        <aside class="app-sidebar">
+            <a class="app-brand" href="@homeHref">
+                <span class="app-brand-icon"><i class="ph-light ph-books"></i></span>
+                <span>
+                    <strong>L'Académie</strong>
+                    <small>RAG Workbench</small>
+                </span>
+            </a>
+
+            <nav class="app-nav" aria-label="Main navigation">
+                <div class="nav-section-title">Không gian số</div>
+                <a class="@NavClass("Chat")" asp-page="/Chat/Session">
+                    <i class="ph-light ph-sparkle"></i><span>Vấn đáp & Tư duy</span>
+                </a>
+                @if (isManagementUser)
+                {
+                    <a class="@NavClass("Home")" href="/">
+                        <i class="ph-light ph-chart-line-up"></i><span>Tổng quan</span>
+                    </a>
+                    @if (canOperateModels)
+                    {
+                    <a class="@NavClass("Finetune")" asp-page="/Finetune/Index">
+                        <i class="ph-light ph-magic-wand"></i><span>Dữ liệu fine-tune</span>
+                    </a>
+                    <a class="@NavClass("Document")" asp-page="/Document/Index">
+                        <i class="ph-light ph-folder-open"></i><span>Lưu trữ học liệu</span>
+                    </a>
+                    <a class="@NavClass("Evaluation")" asp-page="/Evaluation/Index">
+                        <i class="ph-light ph-chart-polar"></i><span>Benchmark</span>
+                    </a>
+                    <a class="@NavClass("TestSetGenerator")" asp-page="/TestSetGenerator/Index">
+                        <i class="ph-light ph-check-square-offset"></i><span>Sinh test set</span>
+                    </a>
+                    }
+                    @if (!canOperateModels)
+                    {
+                        <a class="@NavClass("Document")" asp-page="/Document/Index">
+                            <i class="ph-light ph-folder-open"></i><span>Lưu trữ học liệu</span>
+                        </a>
+                    }
+                    <a class="@NavClass("Course")" asp-page="/Course/Index">
+                        <i class="ph-light ph-notebook"></i><span>Môn học</span>
+                    </a>
+                    @if (isAdmin)
+                    {
+                        <a class="@governanceNavClass"
+                           aria-current="@(governanceNavActive ? "page" : null)"
+                           asp-page="/Admin/Accounts">
+                            <i class="ph-light ph-users-three"></i><span>Nhân sự &amp; Khoa</span>
+                        </a>
+                    }
+                }
+            </nav>
+
+            <div class="sidebar-footer">
+                Tri thức, Thơ ca & Công nghệ.
+            </div>
+        </aside>
+
+        <div class="app-main">
+            <header class="app-topbar">
+                <div>
+                    <span class="topbar-eyebrow">RAG tiếng Việt vs fine-tuning</span>
+                    <strong>@ViewData["Title"]</strong>
+                </div>
+                <div class="topbar-actions">
+                    @if (isSignedIn)
+                    {
+                        <span class="system-status"><span></span> @roleLabel · @User.Identity?.Name</span>
+                        @if (isAdmin)
+                        {
+                            <a asp-page="/Admin/Accounts" class="btn btn-primary btn-sm">
+                                <i class="bi bi-person-plus"></i> Tài khoản
+                            </a>
+                            <a asp-page="/Course/Create" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-journal-plus"></i> Môn học
+                            </a>
+                        }
+                        else if (canUploadDocuments)
+                        {
+                            <a asp-page="/Document/Upload" class="btn btn-primary btn-sm">
+                                <i class="bi bi-cloud-upload"></i> Nạp tài liệu
+                            </a>
+                        }
+                        <form asp-page="/Account/Logout" method="post" class="m-0">
+                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <a asp-page="/Account/Login" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-box-arrow-in-right"></i> Đăng nhập
+                        </a>
+                        <a asp-page="/Account/Register" class="btn btn-primary btn-sm">
+                            <i class="bi bi-person-plus"></i> Đăng ký
+                        </a>
+                    }
+                </div>
+            </header>
+
+            <main class="app-content" role="main">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    @if (isManagementUser)
+    {
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"
+                crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script src="~/js/admin-realtime.js" asp-append-version="true"></script>
+    }
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

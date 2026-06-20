@@ -1,0 +1,27 @@
+@model IEnumerable<PRN222.BLL.DTOs.ChatCitationDto>
+
+@{
+    var citations = Model?.ToList() ?? new List<PRN222.BLL.DTOs.ChatCitationDto>();
+}
+
+@if (citations.Any())
+{
+    <div class="poetic-citations-grid">
+        @foreach (var citation in citations)
+        {
+            <div class="poetic-library-card citation-toggle">
+                <h4>
+                    <span><i class="ph-light ph-quotes"></i> @citation.DocumentName (Trang @citation.StartPage)</span>
+                    <span class="expand-icon"><i class="ph-light ph-caret-down"></i></span>
+                </h4>
+                <p>@citation.SnippetText</p>
+                @if (!string.IsNullOrWhiteSpace(citation.ImageUrl))
+                {
+                    <div class="citation-image-wrapper image-zoom-trigger" data-image-url="@citation.ImageUrl" onclick="event.stopPropagation();">
+                        <img src="@citation.ImageUrl" class="citation-thumbnail" alt="Minh chứng trích dẫn" />
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}

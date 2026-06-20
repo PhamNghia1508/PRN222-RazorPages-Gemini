@@ -1,0 +1,178 @@
+@page "/Account/Login"
+@model PRN222.Web.Pages.Account.LoginModel
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment HostEnvironment
+
+@{
+    ViewData["Title"] = "Dang nhap";
+
+    var demoAccounts = new[]
+    {
+        new
+        {
+            Label = "Admin demo",
+            Icon = "bi-shield-lock",
+            Email = Configuration["SeedAccounts:Admin:Email"],
+            Password = Configuration["SeedAccounts:Admin:Password"],
+            Hint = "Quan tri he thong va phan cong tai khoan"
+        },
+        new
+        {
+            Label = "Truong bo mon demo",
+            Icon = "bi-person-badge",
+            Email = Configuration["SeedAccounts:HeadLecturer:Email"],
+            Password = Configuration["SeedAccounts:HeadLecturer:Password"],
+            Hint = "Nap, xu ly va quan ly tai lieu mon hoc"
+        },
+        new
+        {
+            Label = "Giang vien demo",
+            Icon = "bi-mortarboard",
+            Email = Configuration["SeedAccounts:Lecturer:Email"],
+            Password = Configuration["SeedAccounts:Lecturer:Password"],
+            Hint = "Theo doi mon duoc phan cong va dung Chat RAG"
+        },
+        new
+        {
+            Label = "Sinh vien demo",
+            Icon = "bi-person",
+            Email = Configuration["SeedAccounts:Student:Email"],
+            Password = Configuration["SeedAccounts:Student:Password"],
+            Hint = "Vao Chat RAG"
+        }
+    }
+    .Where(account => !string.IsNullOrWhiteSpace(account.Email) && !string.IsNullOrWhiteSpace(account.Password))
+    .ToList();
+
+    var showDemoAccounts = HostEnvironment.EnvironmentName == "Development" && demoAccounts.Any();
+}
+
+<section class="auth-page">
+    <div class="auth-copy">
+        <span class="section-kicker">PRN222 RAG Workbench</span>
+        <h1>Vao dung vai tro de demo nhanh.</h1>
+        <p>
+            Admin va Truong bo mon quan ly luong nap tai lieu va van hanh mo hinh.
+            Giang vien theo doi cac mon duoc phan cong va dung Chat RAG. Sinh vien
+            dung Chat RAG de hoi dap theo nguon da index.
+        </p>
+        <div class="auth-role-grid" aria-label="Phan quyen he thong">
+            <div class="auth-role-card">
+                <i class="bi bi-shield-lock"></i>
+                <strong>Admin</strong>
+                <span>Toan quyen tren khu vuc quan tri.</span>
+            </div>
+            <div class="auth-role-card">
+                <i class="bi bi-person-badge"></i>
+                <strong>Truong bo mon</strong>
+                <span>Duoc nap va xu ly tai lieu mon hoc.</span>
+            </div>
+            <div class="auth-role-card">
+                <i class="bi bi-mortarboard"></i>
+                <strong>Giang vien</strong>
+                <span>Theo doi mon duoc phan cong va dung Chat RAG.</span>
+            </div>
+            <div class="auth-role-card">
+                <i class="bi bi-chat-dots"></i>
+                <strong>Sinh vien</strong>
+                <span>Hoi dap tai lieu theo mon hoc.</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="auth-card">
+        <span class="section-kicker">Xac thuc</span>
+        <h2>Dang nhap</h2>
+        <p class="auth-subtitle">Dung tai khoan ca nhan hoac chon tai khoan demo ben duoi.</p>
+
+        @if (showDemoAccounts)
+        {
+            <div class="auth-demo-grid auth-demo-grid-compact" aria-label="Tai khoan demo">
+                @foreach (var account in demoAccounts)
+                {
+                    <button type="button"
+                            class="auth-demo-card"
+                            data-demo-email="@account.Email"
+                            data-demo-password="@account.Password">
+                        <span><i class="bi @account.Icon"></i> @account.Label</span>
+                        <strong>@account.Email</strong>
+                        <small>@account.Hint</small>
+                    </button>
+                }
+            </div>
+        }
+
+        <form method="post" class="auth-form" autocomplete="off">
+            <input type="hidden" asp-for="Input.ReturnUrl" />
+            <div asp-validation-summary="ModelOnly" class="inline-alert inline-alert-danger"></div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Email" class="form-label"></label>
+                <div class="auth-input-shell">
+                    <i class="bi bi-envelope"></i>
+                    <input asp-for="Input.Email" class="form-control" autocomplete="username" placeholder="name@example.com" />
+                </div>
+                <span asp-validation-for="Input.Email" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Input.Password" class="form-label"></label>
+                <div class="auth-input-shell">
+                    <i class="bi bi-lock"></i>
+                    <input asp-for="Input.Password" class="form-control" autocomplete="current-password" placeholder="Nhap mat khau" />
+                    <button type="button" class="auth-password-toggle" aria-label="Hien mat khau" data-password-toggle>
+                        <i class="bi bi-eye"></i>
+                    </button>
+                </div>
+                <span asp-validation-for="Input.Password" class="text-danger"></span>
+            </div>
+
+            <div class="auth-form-row">
+                <div class="form-check">
+                    <input asp-for="Input.RememberMe" class="form-check-input" />
+                    <label asp-for="Input.RememberMe" class="form-check-label"></label>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 auth-submit">
+                <i class="bi bi-box-arrow-in-right"></i>
+                <span>Dang nhap</span>
+            </button>
+        </form>
+
+        <div class="auth-switch">
+            <span>Chua co tai khoan?</span>
+            <a asp-page="/Account/Register" asp-route-returnUrl="@Model.Input.ReturnUrl">Tao tai khoan sinh vien</a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const emailInput = document.getElementById('Input_Email');
+            const passwordInput = document.getElementById('Input_Password');
+
+            document.querySelectorAll('.auth-demo-card').forEach((button) => {
+                button.addEventListener('click', () => {
+                    emailInput.value = button.dataset.demoEmail || '';
+                    passwordInput.value = button.dataset.demoPassword || '';
+                    document.querySelectorAll('.auth-demo-card').forEach((item) => item.classList.remove('active'));
+                    button.classList.add('active');
+                    passwordInput.focus();
+                });
+            });
+
+            document.querySelector('[data-password-toggle]')?.addEventListener('click', (event) => {
+                const button = event.currentTarget;
+                const icon = button.querySelector('i');
+                const isPassword = passwordInput.type === 'password';
+
+                passwordInput.type = isPassword ? 'text' : 'password';
+                button.setAttribute('aria-label', isPassword ? 'An mat khau' : 'Hien mat khau');
+                icon.className = isPassword ? 'bi bi-eye-slash' : 'bi bi-eye';
+            });
+        })();
+    </script>
+}

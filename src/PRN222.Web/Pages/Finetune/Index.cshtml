@@ -1,0 +1,102 @@
+@page "/Finetune"
+@using PRN222.Web.Infrastructure
+@model PRN222.Web.Pages.Finetune.IndexModel
+@{
+    ViewData["Title"] = "Fine-tuning Data";
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var isHeadLecturer = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var courses = Model.Courses.ToList();
+}
+
+<section class="ops-hero finetune-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Fine-tuning workspace</span>
+        <h1>Bộ dữ liệu huấn luyện theo từng môn học</h1>
+        <p>
+            Sinh cặp hỏi đáp từ tài liệu đã chunk, xuất JSONL và dùng trực tiếp trong notebook fine-tune.
+            Màn này giúp thầy thấy rõ dữ liệu thật đi vào model thật.
+        </p>
+    </div>
+    <div class="hero-action-stack">
+        @if (canUploadDocuments)
+        {
+            <a asp-page="/Document/Upload" class="btn btn-primary">
+                <i class="bi bi-cloud-upload"></i> Thêm tài liệu
+            </a>
+        }
+        <a asp-page="/Evaluation/Index" class="btn btn-outline-primary">
+            <i class="bi bi-graph-up"></i> Mở benchmark
+        </a>
+    </div>
+</section>
+
+<section class="finetune-flow-grid fade-in-up" style="animation-delay: .06s;">
+    <article class="finetune-flow-card">
+        <span>1</span>
+        <strong>Chuẩn bị tài liệu</strong>
+        <p>Upload slide, PDF hoặc text để hệ thống extract, chunk và embedding.</p>
+    </article>
+    <article class="finetune-flow-card">
+        <span>2</span>
+        <strong>Sinh Q&A</strong>
+        <p>Gemini đọc chunk để tạo tập câu hỏi và câu trả lời dùng làm training data.</p>
+    </article>
+    <article class="finetune-flow-card">
+        <span>3</span>
+        <strong>Fine-tune trong Colab</strong>
+        <p>Export JSONL, train model và chạy endpoint tạm bằng FastAPI hoặc Gradio.</p>
+    </article>
+    <article class="finetune-flow-card">
+        <span>4</span>
+        <strong>Benchmark model thật</strong>
+        <p>.NET gọi endpoint Colab để đánh giá FineTuned, không dùng mock.</p>
+    </article>
+</section>
+
+<section class="workspace-panel fade-in-up" style="animation-delay: .12s;">
+    <div class="workspace-panel-header">
+        <div>
+            <span class="section-kicker">Courses</span>
+            <h2>Chọn môn để quản lý dataset</h2>
+            <p>@courses.Count môn học đang sẵn sàng để sinh hoặc xuất dữ liệu huấn luyện.</p>
+        </div>
+    </div>
+
+    @if (!courses.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-journal-plus"></i>
+            <h3>Chưa có môn học nào</h3>
+            @if (isAdmin)
+            {
+                <p>Tạo môn học trước, sau đó upload tài liệu để sinh dataset fine-tuning.</p>
+                <a asp-page="/Course/Create" class="btn btn-primary">Tạo môn học</a>
+            }
+            else
+            {
+                <p>@(isHeadLecturer ? "Bạn chưa được Admin phân công môn để sinh dataset." : "Chưa có môn học để sinh dataset. Vui lòng chờ Admin tạo danh sách môn học.")</p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="finetune-course-grid">
+            @foreach (var course in courses)
+            {
+                <article class="finetune-course-card">
+                    <div class="finetune-course-icon">
+                        <i class="bi bi-journal-richtext"></i>
+                    </div>
+                    <div>
+                        <h3>@course.Name</h3>
+                        <p>@(string.IsNullOrWhiteSpace(course.Description) ? "Chưa có mô tả cho môn học này." : course.Description)</p>
+                    </div>
+                    <a asp-page="/Finetune/Dataset" asp-route-courseId="@course.Id" class="btn btn-primary btn-sm">
+                        <i class="bi bi-database-check"></i> Mở dataset
+                    </a>
+                </article>
+            }
+        </div>
+    }
+</section>

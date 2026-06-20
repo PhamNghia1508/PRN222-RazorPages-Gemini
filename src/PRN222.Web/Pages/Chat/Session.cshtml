@@ -1,0 +1,1197 @@
+@page "/Chat/Session/{id:int?}"
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@model PRN222.Web.Pages.Chat.SessionModel
+@{
+    ViewData["Title"] = Model.SessionTitle;
+    var courses = Model.Courses.ToList();
+    var hasCourses = courses.Any();
+    var messages = Model.Messages.ToList();
+    var codeExecutionEnabled = Configuration.GetValue<bool>("Features:CodeExecution:Enabled");
+}
+
+<div class="chat-research-layout">
+    <!-- Left Column: Chat Console -->
+    <div class="chat-console">
+        <div class="poetic-chat-area" id="chatContainer">
+            @if (!hasCourses)
+            {
+                <div class="poetic-empty-state" id="emptyState">
+                    <i class="ph-light ph-lock-key"></i>
+                    <h2>Chưa có môn được phân công</h2>
+                    <p>Vui lòng liên hệ Admin để được gán môn trước khi hỏi đáp tài liệu.</p>
+                </div>
+            }
+            else if (!messages.Any())
+            {
+                <div class="poetic-empty-state" id="emptyState">
+                    <i class="ph-light ph-book-open-text"></i>
+                    <h2>Bắt đầu hỏi tài liệu</h2>
+                    <p>Nhập một câu hỏi về nội dung môn học. Trợ lý sẽ trả lời từ tài liệu đã index.</p>
+                    <div class="poetic-bento-suggestions" id="suggestionsContainer">
+                        <!-- Bento suggestion cards loaded dynamically by JS -->
+                    </div>
+                </div>
+            }
+
+            @foreach (var message in messages)
+            {
+                <partial name="_ChatMessage" model="message" />
+            }
+
+            <div id="typingIndicator" class="poetic-message assistant" style="display: none;">
+                <div class="poetic-avatar">✦</div>
+                <div class="poetic-bubble">
+                    <div class="poetic-typing">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="poetic-input-area split-input-area">
+            <div class="poetic-input-container split-input-container">
+                <div id="chatError" style="color: #A67C52; font-size: 13px; text-align: center; margin-bottom: 10px; display: none;"></div>
+                <form id="chatForm" onsubmit="return false;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="sessionId" value="@Model.SessionId" />
+
+                    <div class="poetic-input-meta">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="poetic-scope-pill">
+                                <i class="ph-light ph-database"></i> Tài liệu:
+                                <select id="courseSelect" disabled="@(!hasCourses)">
+                                    @if (hasCourses)
+                                    {
+                                        foreach (var course in courses)
+                                        {
+                                            <option value="@course.Id">@course.Name</option>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <option value="">Chưa có môn học</option>
+                                    }
+                                </select>
+                            </span>
+                            <button type="button" class="poetic-btn-doc-drawer" id="openDocDrawerBtn" disabled="@(!hasCourses)">
+                                <i class="ph-light ph-folder-open"></i> Xem học liệu
+                            </button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <button type="button" class="poetic-action-btn" id="zenModeBtn" title="Chế độ tập trung" aria-pressed="false">
+                                <i class="ph-light ph-eye-slash" id="zenIcon"></i> <span id="zenText">Tập trung</span>
+                            </button>
+                            <button type="button" class="poetic-action-btn" id="openNotebookDrawerBtn" title="Xem sổ tay đã lưu">
+                                <i class="ph-light ph-notebook"></i> <span>Sổ tay</span> <span class="poetic-badge" id="bookmarkCount">0</span>
+                            </button>
+                            <button type="button" class="poetic-action-btn" id="exportMarkdownBtn">
+                                <i class="ph-light ph-download-simple"></i> <span>Xuất sổ tay</span>
+                            </button>
+                            <a class="poetic-action-btn" asp-page="/Chat/Index">
+                                <i class="ph-light ph-clock-counter-clockwise"></i> <span>Lịch sử</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="courseDocHint" style="display: none; margin: 0 0 10px; padding: 9px 12px; border: 1px solid var(--sand-300); border-radius: 8px; color: #6F5A45; background: rgba(255,255,255,0.55); font-size: 13px; line-height: 1.45;"></div>
+
+                    <div class="poetic-input-box">
+                        <textarea id="questionInput"
+                                  placeholder="Nhập câu hỏi học tập... (Shift+Enter để xuống dòng, Enter để gửi)"
+                                  rows="1"
+                                  autocomplete="off"
+                                  disabled="@(!hasCourses)"></textarea>
+                        <button class="poetic-btn-send" type="submit" id="sendBtn" disabled="@(!hasCourses)">
+                            <i class="ph-light ph-paper-plane-right"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Evidence Panel -->
+    @{
+        var lastAssistantMessage = messages.LastOrDefault(m => string.Equals(m.Role, "Assistant", StringComparison.OrdinalIgnoreCase));
+        var initialCitations = lastAssistantMessage?.Citations ?? new List<PRN222.BLL.DTOs.ChatCitationDto>();
+    }
+    <partial name="_EvidencePanel" model="initialCitations" />
+</div>
+
+<div class="poetic-drawer-backdrop" id="docDrawerBackdrop"></div>
+<div class="poetic-drawer" id="docDrawer">
+    <div class="poetic-drawer-header">
+        <h3>📑 Học Liệu Đã Nạp</h3>
+        <button class="poetic-drawer-close" id="closeDocDrawerBtn">
+            <i class="ph-light ph-x"></i>
+        </button>
+    </div>
+    <div class="poetic-drawer-content" id="docDrawerContent">
+        <div class="poetic-drawer-empty">
+            <i class="ph-light ph-folder-open"></i>
+            Đang tải tài liệu học tập...
+        </div>
+</div>
+
+<div class="poetic-drawer-backdrop" id="notebookDrawerBackdrop" style="display: none; z-index: 1045;"></div>
+<div class="poetic-drawer" id="notebookDrawer" style="z-index: 1055;">
+    <div class="poetic-drawer-header">
+        <h3>📓 Sổ Tay Ghi Chú</h3>
+        <button class="poetic-drawer-close" id="closeNotebookDrawerBtn">
+            <i class="ph-light ph-x"></i>
+        </button>
+    </div>
+    <div class="poetic-drawer-content" id="notebookDrawerContent" style="padding-bottom: 20px;">
+        <!-- Notes list loaded dynamically by JS -->
+    </div>
+</div>
+
+
+<!-- Sân chơi Code Sandbox C# Modal -->
+<div class="modal fade" id="codePlaygroundModal" tabindex="-1" aria-labelledby="codePlaygroundModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="background: #FAF8F4; border: 1px solid #E5DFD3; border-radius: 12px; box-shadow: 0 15px 50px rgba(80,60,40,0.1);">
+            <div class="modal-header" style="border-bottom: 1px dashed rgba(166, 124, 82, 0.2); padding: 20px 24px;">
+                <div>
+                    <span class="section-eyebrow" style="color: var(--accent-color); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; display: block; margin-bottom: 4px;">L'Académie Sandbox</span>
+                    <h5 class="modal-title" id="codePlaygroundModalLabel" style="font-family: var(--font-display); font-weight: 600; font-size: 20px; color: var(--ink-900);">Sân Chơi Lập Trình C#</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="background-color: transparent; border: none; font-size: 18px; color: #8A7A6A;"></button>
+            </div>
+            <div class="modal-body" style="padding: 24px;">
+                <div class="row g-4">
+                    <div class="col-lg-7">
+                        <label class="form-label" style="font-weight: 600; color: var(--ink-800); font-size: 14px; margin-bottom: 8px; display: block;">Mã nguồn C#</label>
+                        <textarea id="playgroundCodeEditor" class="form-control" style="font-family: var(--font-mono); font-size: 13.5px; height: 400px; background: #1E1E1E; color: #D4D4D4; border-radius: 8px; padding: 18px; resize: none; border: none; line-height: 1.5; outline: none; box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);"></textarea>
+                    </div>
+                    <div class="col-lg-5">
+                        <label class="form-label" style="font-weight: 600; color: var(--ink-800); font-size: 14px; margin-bottom: 8px; display: block;">Kết quả thực thi</label>
+                        <div id="playgroundOutput" style="font-family: var(--font-mono); font-size: 13px; height: 400px; background: #0F0F0F; color: #00FF00; border-radius: 8px; padding: 18px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; border: 1px solid rgba(255,255,255,0.05); box-shadow: inset 0 2px 8px rgba(0,0,0,0.3);"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid rgba(213, 201, 179, 0.3); padding: 16px 24px;">
+                <button type="button" class="poetic-suggestion-btn" data-bs-dismiss="modal" style="border-radius: 20px; padding: 8px 20px; font-size: 13.5px;">Đóng</button>
+                <button type="button" class="poetic-history-btn" id="playgroundRunBtn" style="border-radius: 20px; padding: 8px 24px; width: auto; background: var(--accent-color); color: #fff; border: none; font-size: 13.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px;">
+                    <i class="ph-light ph-play"></i> Thực thi Code
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox Image Modal -->
+<div class="modal fade" id="imageLightboxModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content lightbox-modal-content">
+            <div class="modal-header" style="border-bottom: 1px dashed rgba(166, 124, 82, 0.2); padding: 12px 20px;">
+                <h5 class="modal-title" style="font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--ink-900);">Chi tiết hình ảnh minh chứng</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" style="background-color: transparent; border: none; font-size: 16px; color: #8A7A6A;"></button>
+            </div>
+            <div class="modal-body" style="padding: 20px; text-align: center; background: #fff;">
+                <img id="lightboxImage" src="" class="lightbox-image" alt="Minh chứng trích dẫn phóng to" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/governance.js" asp-append-version="true"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            const codeExecutionEnabled = @codeExecutionEnabled.ToString().ToLowerInvariant();
+
+            function showChatToast(message, isError = false, title = null) {
+                if (window.GovernancePage?.showStatusToast) {
+                    window.GovernancePage.showStatusToast({
+                        title: title || (isError ? 'Không thể thực hiện' : 'Đã cập nhật'),
+                        message: message,
+                        tone: isError ? 'error' : 'success'
+                    });
+                    return;
+                }
+
+                console[isError ? 'error' : 'log'](message);
+            }
+
+            // Move modal to body to prevent Bootstrap z-index backdrop overlay issues
+            if (codeExecutionEnabled) {
+                $('#codePlaygroundModal').appendTo('body');
+            }
+            $('#imageLightboxModal').appendTo('body');
+
+            const chatContainer = document.getElementById('chatContainer');
+            const chatError = document.getElementById('chatError');
+            const questionInput = $('#questionInput');
+            const sendButton = $('#sendBtn');
+
+            // Collapsible citation handler
+            $(document).on('click', '.citation-toggle', function () {
+                $(this).toggleClass('expanded');
+            });
+
+            // Feedback button handler
+            $(document).on('click', '.poetic-msg-feedback-btn', function () {
+                const $btn = $(this);
+                const messageId = parseInt($btn.attr('data-message-id') || $btn.data('message-id'));
+                const isHelpful = $btn.data('helpful') === true || $btn.data('helpful') === "true";
+
+                if (isNaN(messageId)) {
+                    console.error('Message ID không hợp lệ.');
+                    return;
+                }
+
+                $.ajax({
+                    url: '/Chat/Session?handler=Feedback',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    data: JSON.stringify({
+                        MessageId: messageId,
+                        IsHelpful: isHelpful
+                    }),
+                    success: function (res) {
+                        const $actions = $btn.closest('.poetic-message-actions');
+                        const $up = $actions.find('.feedback-up');
+                        const $down = $actions.find('.feedback-down');
+
+                        if (isHelpful) {
+                            $up.addClass('active').find('i').removeClass('ph-light').addClass('ph-fill');
+                            $down.removeClass('active').find('i').removeClass('ph-fill').addClass('ph-light');
+                        } else {
+                            $down.addClass('active').find('i').removeClass('ph-light').addClass('ph-fill');
+                            $up.removeClass('active').find('i').removeClass('ph-fill').addClass('ph-light');
+                        }
+                    },
+                    error: function (xhr) {
+                        showChatToast('Không thể lưu phản hồi của bạn. Vui lòng thử lại sau.', true, 'Lưu phản hồi thất bại');
+                        console.error('Lỗi khi gửi phản hồi:', xhr.responseJSON?.error || xhr.responseText);
+                    }
+                });
+            });
+
+            // Auto-resize textarea
+            questionInput.on('input', function () {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+
+            // Enter key triggers submit, Shift+Enter adds newline
+            questionInput.on('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    $('#chatForm').submit();
+                }
+            });
+
+            $('.markdown-content').each(function () {
+                const rawText = $(this).text();
+                $(this).siblings('.parsed-content').html(renderMarkdown(rawText));
+            });
+
+            // Initial load code runners and interactive widgets
+            $('.poetic-message.assistant').each(function () {
+                initCodeRunners($(this));
+                initInteractiveWidgets($(this));
+            });
+
+            scrollToBottom();
+
+            // Dynamic Suggestions based on selected Course
+            function updateSuggestions(courseName) {
+                const container = $('#suggestionsContainer');
+                if (!container.length) return;
+
+                let suggestions = [];
+                const nameLower = (courseName || "").toLowerCase();
+
+                if (nameLower.includes("mạng") || nameLower.includes("network")) {
+                    suggestions = [
+                        { title: "Tóm tắt nhanh", text: "Tóm tắt 5 giao thức hoặc khái niệm mạng quan trọng nhất.", icon: "ph-notebook", q: "Hãy tóm tắt 5 khái niệm hoặc giao thức cốt lõi quan trọng nhất trong tài liệu học phần mạng máy tính này." },
+                        { title: "Đố vui ôn tập", text: "Tạo 3 câu hỏi trắc nghiệm kiểm tra kiến thức giao thức mạng.", icon: "ph-question", q: "Hãy tạo 3 câu hỏi trắc nghiệm ôn tập về các giao thức mạng trong học liệu này, định dạng theo chuẩn [QUIZ]." },
+                        { title: "Thẻ flashcard", text: "Tạo thẻ học nhanh các khái niệm chính môn Mạng.", icon: "ph-cards", q: "Hãy tạo 4 thẻ flashcard học nhanh các khái niệm cốt lõi trong tài liệu mạng máy tính này, định dạng theo chuẩn [FLASHCARDS]." },
+                        { title: "Bài tập thực hành", text: "Gợi ý ví dụ Socket C# client-server cơ bản.", icon: "ph-code", q: "Hãy đưa ra một ví dụ code C# cơ bản minh họa lập trình Socket TCP/IP Client-Server và giải thích từng phần." }
+                    ];
+                } else if (nameLower.includes("java") || nameLower.includes("oop")) {
+                    suggestions = [
+                        { title: "Tóm tắt nhanh", text: "Tóm tắt các khái niệm Java/OOP từ học liệu đã index.", icon: "ph-notebook", q: "Hãy tóm tắt các khái niệm Java hoặc OOP quan trọng nhất trong tài liệu môn này." },
+                        { title: "Đố vui ôn tập", text: "Tạo câu hỏi ôn tập Java dựa trên tài liệu.", icon: "ph-question", q: "Hãy tạo 3 câu hỏi trắc nghiệm ôn tập Java dựa trên tài liệu môn này, định dạng theo chuẩn [QUIZ]." },
+                        { title: "Thẻ flashcard", text: "Tạo thẻ ghi nhớ thuật ngữ Java/OOP.", icon: "ph-cards", q: "Hãy tạo 4 thẻ flashcard học nhanh các khái niệm Java hoặc OOP trong tài liệu, định dạng theo chuẩn [FLASHCARDS]." },
+                        { title: "Bài tập thực hành", text: "Đề xuất bài tập Java nếu tài liệu có đủ ngữ cảnh.", icon: "ph-code", q: "Dựa trên tài liệu môn Java này, hãy đề xuất một bài tập thực hành nhỏ và lời giải mẫu phù hợp." }
+                    ];
+                } else if (nameLower.includes("python")) {
+                    suggestions = [
+                        { title: "Tóm tắt nhanh", text: "Tóm tắt ý chính trong học liệu Python.", icon: "ph-notebook", q: "Hãy tóm tắt các khái niệm Python quan trọng nhất trong tài liệu môn này." },
+                        { title: "Đố vui ôn tập", text: "Tạo câu hỏi trắc nghiệm Python.", icon: "ph-question", q: "Hãy tạo 3 câu hỏi trắc nghiệm ôn tập Python dựa trên tài liệu môn này, định dạng theo chuẩn [QUIZ]." },
+                        { title: "Thẻ flashcard", text: "Tạo thẻ học nhanh thuật ngữ Python.", icon: "ph-cards", q: "Hãy tạo 4 thẻ flashcard học nhanh các khái niệm Python trong tài liệu, định dạng theo chuẩn [FLASHCARDS]." },
+                        { title: "Bài tập thực hành", text: "Đề xuất bài tập Python nếu học liệu có đủ ngữ cảnh.", icon: "ph-code", q: "Dựa trên tài liệu môn Python này, hãy đề xuất một bài tập thực hành nhỏ và lời giải mẫu phù hợp." }
+                    ];
+                } else if (nameLower.includes("lập trình") || nameLower.includes("c#") || nameLower.includes(".net") || nameLower.includes("prn")) {
+                    suggestions = [
+                        { title: "Tóm tắt nhanh", text: "Tóm tắt mô hình MVC và Entity Framework trong ASP.NET.", icon: "ph-notebook", q: "Hãy tóm tắt ngắn gọn mô hình MVC và cách Entity Framework kết nối CSDL trong ASP.NET Core." },
+                        { title: "Đố vui ôn tập", text: "Tạo câu hỏi ôn tập về LINQ và Dependency Injection.", icon: "ph-question", q: "Hãy tạo 3 câu hỏi trắc nghiệm ôn tập về LINQ và Dependency Injection trong C#, định dạng theo chuẩn [QUIZ]." },
+                        { title: "Thẻ flashcard", text: "Tạo thẻ học nhanh OOP, Interface và DI trong C#.", icon: "ph-cards", q: "Hãy tạo 4 thẻ flashcard học nhanh các khái niệm OOP, Interface và DI từ tài liệu này, định dạng theo chuẩn [FLASHCARDS]." },
+                        { title: "Bài tập thực hành", text: "Gợi ý ví dụ code C# về Generic và async/await.", icon: "ph-code", q: "Hãy hướng dẫn viết một ví dụ code C# kết hợp Generic Class và lập trình bất đồng bộ async/await." }
+                    ];
+                } else if (nameLower.includes("cơ sở dữ liệu") || nameLower.includes("database") || nameLower.includes("sql")) {
+                    suggestions = [
+                        { title: "Tóm tắt nhanh", text: "Tóm tắt chuẩn hóa database và ràng buộc dữ liệu.", icon: "ph-notebook", q: "Tóm tắt các quy tắc chuẩn hóa database từ 1NF đến 3NF và giải thích vì sao cần chuẩn hóa." },
+                        { title: "Đố vui ôn tập", text: "Tạo câu hỏi về Index và ACID Transaction.", icon: "ph-question", q: "Tạo 3 câu hỏi trắc nghiệm ôn tập về Index và tính chất ACID của Transaction trong CSDL, định dạng theo chuẩn [QUIZ]." },
+                        { title: "Thẻ flashcard", text: "Tạo thẻ học nhanh thuật ngữ database quan trọng.", icon: "ph-cards", q: "Hãy tạo 4 thẻ flashcard học nhanh các khái niệm và thuật ngữ CSDL quan trọng từ tài liệu, định dạng theo chuẩn [FLASHCARDS]." },
+                        { title: "Bài tập thực hành", text: "Gợi ý ví dụ Stored Procedure và Function SQL Server.", icon: "ph-code", q: "Viết ví dụ lệnh SQL tạo Stored Procedure có tham số và một Function tính toán trong SQL Server." }
+                    ];
+                } else {
+                    suggestions = [
+                        { title: "Tóm tắt nhanh", text: "Tóm tắt 5 ý chính quan trọng nhất từ tài liệu.", icon: "ph-notebook", q: "Tóm tắt 5 khái niệm hoặc ý chính quan trọng nhất trong tài liệu học liệu đã được index." },
+                        { title: "Đố vui ôn tập", text: "Tạo bộ câu hỏi trắc nghiệm ôn thi dựa trên tài liệu.", icon: "ph-question", q: "Hãy tạo 3 câu hỏi trắc nghiệm ôn tập dựa vào nội dung tài liệu học tập đã nạp, định dạng theo chuẩn [QUIZ]." },
+                        { title: "Thẻ flashcard", text: "Tạo thẻ ghi nhớ ôn tập thuật ngữ từ tài liệu.", icon: "ph-cards", q: "Hãy tạo 4 thẻ flashcard học nhanh các khái niệm chính từ tài liệu này, định dạng theo chuẩn [FLASHCARDS]." },
+                        { title: "Bài tập thực hành", text: "Gợi ý ví dụ thực hành phù hợp với nội dung tài liệu.", icon: "ph-code", q: "Dựa trên tài liệu, hãy đề xuất một bài tập thực hành nhỏ và lời giải mẫu để sinh viên tự luyện tập." }
+                    ];
+                }
+                container.empty();
+                suggestions.forEach(s => {
+                    container.append(`
+                        <article class="poetic-bento-suggestion-card chat-suggestion" data-question="${s.q}">
+                            <i class="ph-light ${s.icon}"></i>
+                            <h4>${s.title}</h4>
+                            <p>${s.text}</p>
+                        </article>
+                    `);
+                });
+
+                // Rebind click events
+                $('.chat-suggestion').off('click').on('click', function () {
+                    questionInput.val($(this).data('question'));
+                    questionInput.trigger('input');
+                    questionInput.focus();
+                });
+            }
+
+            // Load documents for Document Drawer
+            function loadCourseDocuments(courseId) {
+                const content = $('#docDrawerContent');
+                if (!courseId) {
+                    content.html('<div class="poetic-drawer-empty"><i class="ph-light ph-folder-open"></i>Chưa chọn môn học.</div>');
+                    return;
+                }
+
+                content.html('<div class="poetic-drawer-empty"><i class="ph-light ph-circle-notch ph-spin"></i> Đang tải học liệu...</div>');
+
+                $.ajax({
+                    url: '/Chat/Session?handler=CourseDocuments',
+                    type: 'GET',
+                    data: { courseId: courseId },
+                    success: function (res) {
+                        content.empty();
+                        if (!res || res.length === 0) {
+                            content.html('<div class="poetic-drawer-empty"><i class="ph-light ph-folder-open"></i>Môn học này chưa được nạp tài liệu.</div>');
+                            return;
+                        }
+
+                        res.forEach(doc => {
+                            let iconClass = 'ph-file';
+                            const nameLower = doc.name.toLowerCase();
+                            if (nameLower.endsWith('.pdf')) iconClass = 'ph-file-pdf';
+                            else if (nameLower.endsWith('.txt')) iconClass = 'ph-file-text';
+                            else if (nameLower.endsWith('.doc') || nameLower.endsWith('.docx')) iconClass = 'ph-file-doc';
+                            else if (nameLower.endsWith('.ppt') || nameLower.endsWith('.pptx')) iconClass = 'ph-file-ppt';
+
+                            content.append(`
+                                <div class="poetic-drawer-item">
+                                    <i class="ph-light ${iconClass}"></i>
+                                    <div class="poetic-drawer-item-name" title="${escapeHtml(doc.name)}">${escapeHtml(doc.name)}</div>
+                                    <span class="poetic-drawer-item-status status-ready">Sẵn sàng</span>
+                                </div>
+                            `);
+                        });
+                    },
+                    error: function () {
+                        content.html('<div class="poetic-drawer-empty" style="color: #A67C52;"><i class="ph-light ph-warning"></i> Không thể tải danh sách tài liệu.</div>');
+                    }
+                });
+            }
+
+            function refreshCourseDocumentHint(courseId, courseName) {
+                const hint = $('#courseDocHint');
+                if (!hint.length || !courseId) {
+                    hint.hide().text('');
+                    return;
+                }
+
+                $.ajax({
+                    url: '/Chat/Session?handler=CourseDocuments',
+                    type: 'GET',
+                    data: { courseId: courseId },
+                    success: function (res) {
+                        const docs = Array.isArray(res) ? res : [];
+                        const indexedCount = docs.filter(d => (d.status || '').toLowerCase() === 'indexed').length;
+
+                        if (docs.length === 0) {
+                            hint
+                                .html(`<i class="ph-light ph-info"></i> Môn <strong>${escapeHtml(courseName)}</strong> chưa có tài liệu. Nếu hỏi bây giờ, trợ lý sẽ báo chưa có nguồn học liệu để trả lời.`)
+                                .show();
+                            return;
+                        }
+
+                        if (indexedCount === 0) {
+                            hint
+                                .html(`<i class="ph-light ph-clock"></i> Môn <strong>${escapeHtml(courseName)}</strong> đã có ${docs.length} tài liệu nhưng chưa có tài liệu ở trạng thái Indexed.`)
+                                .show();
+                            return;
+                        }
+
+                        hint
+                            .html(`<i class="ph-light ph-check-circle"></i> Môn <strong>${escapeHtml(courseName)}</strong> có ${indexedCount} tài liệu đã index, sẵn sàng hỏi đáp theo nguồn.`)
+                            .show();
+                    },
+                    error: function () {
+                        hint.hide().text('');
+                    }
+                });
+            }
+
+            // Course select change handler
+            $('#courseSelect').on('change', function () {
+                const selectedText = $(this).find('option:selected').text();
+                updateSuggestions(selectedText);
+                refreshCourseDocumentHint($(this).val(), selectedText);
+            });
+
+            // Drawer Handlers
+            const docDrawer = $('#docDrawer');
+            const docDrawerBackdrop = $('#docDrawerBackdrop');
+
+            $('#openDocDrawerBtn').on('click', function () {
+                const courseId = $('#courseSelect').val();
+                loadCourseDocuments(courseId);
+                docDrawer.addClass('open');
+                docDrawerBackdrop.fadeIn(200);
+            });
+
+            $('#closeDocDrawerBtn, #docDrawerBackdrop').on('click', function () {
+                docDrawer.removeClass('open');
+                docDrawerBackdrop.fadeOut(200);
+            });
+
+            // Page Initialization
+            const initialCourseText = $('#courseSelect').find('option:selected').text();
+            if (initialCourseText) {
+                updateSuggestions(initialCourseText);
+                refreshCourseDocumentHint($('#courseSelect').val(), initialCourseText);
+            }
+
+            // Export Chat to Markdown File
+            $('#exportMarkdownBtn').on('click', function () {
+                const messages = $('.poetic-message');
+                if (messages.length <= 1) {
+                    showChatToast('Chưa có nội dung cuộc đối thoại để xuất sổ tay.', true, 'Chưa có dữ liệu');
+                    return;
+                }
+
+                let markdown = `# Nhật ký học tập: ${document.title || 'Phiên vấn đáp'}\n`;
+                markdown += `*Thời gian xuất: ${new Date().toLocaleString('vi-VN')}*\n\n---\n\n`;
+
+                messages.each(function () {
+                    const $msg = $(this);
+                    if ($msg.attr('id') === 'typingIndicator') return;
+
+                    const isUser = $msg.hasClass('user');
+                    const role = isUser ? 'Sinh viên' : 'Trợ lý AI';
+                    const text = isUser
+                        ? $msg.find('.chat-user-text').text().trim()
+                        : $msg.find('.parsed-content').text().trim();
+
+                    if (!text) return;
+
+                    markdown += `### ✦ ${role}:\n${text}\n\n`;
+
+                    if (!isUser) {
+                        const citations = $msg.find('.poetic-library-card');
+                        if (citations.length > 0) {
+                            markdown += `*Tài liệu tham chiếu:*\n`;
+                            citations.each(function () {
+                                const title = $(this).find('h4 span').first().text().trim();
+                                const snippet = $(this).find('p').text().trim();
+                                markdown += `> - **${title}**: ${snippet}\n`;
+                            });
+                            markdown += `\n`;
+                        }
+                    }
+                    markdown += `---\n\n`;
+                });
+
+                const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.href = url;
+                link.setAttribute('download', `study_note_${new Date().toISOString().slice(0,10)}.md`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+
+            $('#chatForm').on('submit', function () {
+                const question = questionInput.val().trim();
+                const courseId = $('#courseSelect').val();
+                let sessionId = $('#sessionId').val();
+
+                if (!question) {
+                    questionInput.focus();
+                    return;
+                }
+
+                hideError();
+                $('#emptyState').hide();
+                appendUserMessage(question);
+
+                // Clear and reset textarea height
+                questionInput.val('');
+                questionInput.css('height', 'auto');
+
+                setBusy(true);
+
+                $.ajax({
+                    url: '/Chat/Session?handler=Ask',
+                    type: 'POST',
+                    headers: {
+                        'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        sessionId: (sessionId && sessionId.length > 0) ? parseInt(sessionId) : null,
+                        courseId: parseInt(courseId),
+                        question: question
+                    }),
+                    success: function (res) {
+                        if ((!sessionId || sessionId.length === 0) && res.sessionId) {
+                            $('#sessionId').val(res.sessionId);
+                            window.history.pushState({}, '', '/Chat/Session/' + res.sessionId);
+                        }
+
+                        appendAssistantMessage(res);
+                        scrollToBottom();
+                    },
+                    error: function (xhr) {
+                        // Restore question text if failed so the user doesn't lose their input
+                        questionInput.val(question);
+                        questionInput.trigger('input');
+                        const message = xhr.responseJSON?.error || 'Không thể kết nối tới hệ thống hỏi đáp.';
+                        showError(message);
+                    },
+                    complete: function () {
+                        setBusy(false);
+                        questionInput.focus();
+                    }
+                });
+            });
+
+            function setBusy(isBusy) {
+                $('#typingIndicator').toggle(isBusy);
+                questionInput.prop('disabled', isBusy);
+                sendButton.prop('disabled', isBusy);
+                scrollToBottom();
+            }
+            function appendUserMessage(text) {
+                const msgHtml = `
+                    <div class="poetic-message user">
+                        <div class="poetic-bubble">
+                            <div class="chat-user-text">${escapeHtml(text)}</div>
+                        </div>
+                        <div class="poetic-avatar"><i class="ph-light ph-user"></i></div>
+                    </div>`;
+
+                $(msgHtml).insertBefore('#typingIndicator');
+            }
+
+            function appendAssistantMessage(data) {
+                const citationsHtml = renderCitations(data.citations || []);
+                const content = renderMarkdown(data.content || '');
+                const citationsJson = JSON.stringify(data.citations || []);
+                const isHelpfulUp = data.isHelpful === true || data.IsHelpful === true;
+                const isHelpfulDown = data.isHelpful === false || data.IsHelpful === false;
+                const messageId = data.id || data.Id;
+                const msgHtml = `
+                    <div class="poetic-message assistant" data-citations="${escapeHtml(citationsJson)}">
+                        <div class="poetic-avatar">✦</div>
+                        <div style="flex: 1;">
+                            <div class="poetic-bubble">
+                                <div class="parsed-content">${content}</div>
+                            </div>
+                            <div class="poetic-message-actions">
+                                <button type="button" class="poetic-msg-bookmark-btn" title="Lưu vào Sổ tay">
+                                    <i class="ph-light ph-bookmark-simple"></i> <span>Lưu sổ tay</span>
+                                </button>
+                                <button type="button" class="poetic-msg-feedback-btn feedback-up ${isHelpfulUp ? 'active' : ''}" data-message-id="${messageId}" data-helpful="true" title="Hữu ích">
+                                    <i class="${isHelpfulUp ? 'ph-fill' : 'ph-light'} ph-thumbs-up"></i>
+                                </button>
+                                <button type="button" class="poetic-msg-feedback-btn feedback-down ${isHelpfulDown ? 'active' : ''}" data-message-id="${messageId}" data-helpful="false" title="Không hữu ích">
+                                    <i class="${isHelpfulDown ? 'ph-fill' : 'ph-light'} ph-thumbs-down"></i>
+                                </button>
+                            </div>
+                            ${citationsHtml}
+                        </div>
+                    </div>`;
+
+                const $msg = $(msgHtml).insertBefore('#typingIndicator');
+                initCodeRunners($msg);
+                initInteractiveWidgets($msg);
+
+                // Update the right-hand evidence panel immediately
+                updateEvidencePanel(data.citations || []);
+            }
+
+            function renderMarkdown(raw) {
+                const text = raw || '';
+                if (!window.marked || !window.DOMPurify) {
+                    return escapeHtml(text).replace(/\n/g, '<br>');
+                }
+
+                const renderer = new marked.Renderer();
+                const originalCode = renderer.code.bind(renderer);
+                renderer.code = function (code, language, escaped) {
+                    const langLower = (language || '').toLowerCase().trim();
+                    if (codeExecutionEnabled &&
+                        (langLower === 'csharp' || langLower === 'cs' || langLower === 'c#' || !langLower)) {
+                        const codeText = typeof code === 'object' ? code.text : code;
+                        return `
+                            <div class="code-sandbox-container" style="position: relative;">
+                                <button class="btn-run-code" data-code="${escapeHtml(codeText)}">
+                                    <i class="ph-light ph-play"></i> Run Code
+                                </button>
+                                ${originalCode(code, language, escaped)}
+                            </div>`;
+                    }
+                    return originalCode(code, language, escaped);
+                };
+
+                let html = marked.parse(text, { renderer: renderer });
+
+                // Custom parsing for interactive Quiz and Flashcard modules
+                html = parseQuizBlock(html);
+                html = parseFlashcardsBlock(html);
+
+                // Run DOMPurify at the very end to ensure all text within custom blocks is sanitized
+                html = DOMPurify.sanitize(html, {
+                    USE_PROFILES: { html: true },
+                    ADD_TAGS: ['button', 'i'],
+                    ADD_ATTR: ['data-code', 'data-correct', 'data-val', 'disabled']
+                });
+
+                return html;
+            }
+
+            function initCodeRunners($container) {
+                $container.find('.btn-run-code').off('click').on('click', function() {
+                    const code = $(this).data('code') || '';
+                    $('#playgroundCodeEditor').val(code);
+                    $('#playgroundOutput').text('Nhấn "Thực thi Code" để biên dịch và chạy chương trình...').css('color', '#8A7A6A');
+                    $('#playgroundRunBtn').prop('disabled', false).html('<i class="ph-light ph-play"></i> Thực thi Code');
+
+                    const modalEl = document.getElementById('codePlaygroundModal');
+                    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    modal.show();
+                });
+            }
+
+            // Sân chơi Code Sandbox Runner
+            $('#playgroundRunBtn').on('click', function () {
+                const code = $('#playgroundCodeEditor').val();
+                const $btn = $(this);
+                const $output = $('#playgroundOutput');
+
+                $btn.prop('disabled', true).html('<i class="ph-light ph-hourglass"></i> Đang chạy...');
+                $output.text('Đang biên dịch và thực thi trên server...').css('color', '#00FF00');
+
+                $.ajax({
+                    url: '/CodeRunner?handler=Execute',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                    },
+                    data: JSON.stringify({ code: code }),
+                    success: function (res) {
+                        $output.text(res.output).css('color', '#00FF00');
+                    },
+                    error: function (xhr) {
+                        $output.text(xhr.responseJSON?.error || 'Lỗi khi thực thi code.').css('color', '#FF3B30');
+                    },
+                    complete: function () {
+                        $btn.prop('disabled', false).html('<i class="ph-light ph-play"></i> Thực thi Code');
+                    }
+                });
+            });
+
+            function renderCitations(citations) {
+                if (!citations.length) return '';
+
+                const cards = citations.map(citation => {
+                    let imgHtml = '';
+                    const imgUrlVal = citation.imageUrl ?? citation.ImageUrl;
+                    const docNameVal = citation.documentName ?? citation.DocumentName ?? 'Tài liệu';
+                    const startPageVal = citation.startPage ?? citation.StartPage ?? 0;
+                    const snippetVal = citation.snippetText ?? citation.SnippetText ?? '';
+
+                    if (imgUrlVal) {
+                        imgHtml = `
+                            <div class="citation-image-wrapper image-zoom-trigger" data-image-url="${escapeHtml(imgUrlVal)}" onclick="event.stopPropagation();">
+                                <img src="${escapeHtml(imgUrlVal)}" class="citation-thumbnail" alt="Minh chứng trích dẫn" />
+                            </div>`;
+                    }
+                    return `
+                        <div class="poetic-library-card citation-toggle">
+                            <h4>
+                                <span><i class="ph-light ph-quotes"></i> ${escapeHtml(docNameVal)} (Trang ${escapeHtml(String(startPageVal))})</span>
+                                <span class="expand-icon"><i class="ph-light ph-caret-down"></i></span>
+                            </h4>
+                            <p>${escapeHtml(snippetVal)}</p>
+                            ${imgHtml}
+                        </div>`;
+                }).join('');
+
+                return `<div class="poetic-citations-grid">${cards}</div>`;
+            }
+
+            function updateEvidencePanel(citations) {
+                const $list = $('#retrievedContextList');
+                const $count = $('.chat-evidence-count');
+
+                $count.text(citations.length);
+                $list.empty();
+
+                if (!citations || citations.length === 0) {
+                    $list.append(`
+                        <div class="chat-evidence-empty" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; color: #8A7A6A;">
+                            <i class="ph-light ph-magnifying-glass" style="font-size: 48px; color: var(--accent-color); margin-bottom: 12px;"></i>
+                            <h3 style="font-size: 15px; font-weight: 600; color: var(--ink-900); margin-bottom: 6px;">Chưa có ngữ cảnh</h3>
+                            <p style="font-size: 13px; max-width: 240px; margin: 0; line-height: 1.4;">Đặt câu hỏi học tập để xem các đoạn tài liệu được truy xuất và độ liên quan.</p>
+                        </div>
+                    `);
+                    return;
+                }
+
+                citations.forEach(c => {
+                    let imgHtml = '';
+                    const imgUrlVal = c.imageUrl ?? c.ImageUrl;
+                    const docNameVal = c.documentName ?? c.DocumentName ?? 'Tài liệu';
+                    const startPageVal = c.startPage ?? c.StartPage ?? 0;
+                    const snippetVal = c.snippetText ?? c.SnippetText ?? '';
+
+                    if (imgUrlVal) {
+                        imgHtml = `
+                            <div class="citation-image-wrapper image-zoom-trigger" data-image-url="${escapeHtml(imgUrlVal)}">
+                                <img src="${escapeHtml(imgUrlVal)}" class="citation-thumbnail" alt="Minh chứng trích dẫn" />
+                            </div>`;
+                    }
+
+                    const score = typeof c.relevanceScore === 'number'
+                        ? (c.relevanceScore * 100).toFixed(0) + '%'
+                        : (typeof c.RelevanceScore === 'number' ? (c.RelevanceScore * 100).toFixed(0) + '%' : '100%');
+
+                    $list.append(`
+                        <article class="chat-evidence-card" style="background: #fff; border: 1px solid var(--sand-300); border-radius: 8px; padding: 12px; transition: all 0.2s;">
+                            <div class="chat-evidence-card-top" style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                                <span class="chat-evidence-score" style="color: var(--accent-color); font-weight: 700;">Độ tương đồng: ${score}</span>
+                                <span class="chat-evidence-page" style="color: #8A7A6A; font-weight: 500;">Trang ${startPageVal}</span>
+                            </div>
+                            <strong style="display: block; font-size: 13px; color: var(--ink-900); margin-bottom: 4px; font-family: var(--font-display);">${escapeHtml(docNameVal)}</strong>
+                            <p style="font-size: 12.5px; color: var(--ink-800); line-height: 1.5; margin: 0;">${escapeHtml(snippetVal)}</p>
+                            ${imgHtml}
+                        </article>
+                    `);
+                });
+            }
+
+            // Click assistant message bubble or citation block to show in Evidence Panel
+            $(document).on('click', '.poetic-message.assistant .poetic-bubble, .poetic-message.assistant .poetic-citations-grid', function (e) {
+                // Ignore clicks on buttons/links/images
+                if ($(e.target).closest('button, a, .citation-image-wrapper').length) return;
+
+                const $msg = $(this).closest('.poetic-message.assistant');
+                let citations = $msg.data('citations');
+                if (typeof citations === 'string') {
+                    try { citations = JSON.parse(citations); } catch (e) { citations = []; }
+                }
+                if (citations) {
+                    updateEvidencePanel(citations);
+                }
+            });
+
+            // Click image thumbnail to zoom (Lightbox)
+            $(document).on('click', '.image-zoom-trigger', function (e) {
+                e.stopPropagation();
+                const imageUrl = $(this).data('image-url');
+                if (imageUrl) {
+                    $('#lightboxImage').attr('src', imageUrl);
+                    const modalEl = document.getElementById('imageLightboxModal');
+                    const lightboxModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    lightboxModal.show();
+                }
+            });
+
+            function showError(message) {
+                chatError.textContent = message;
+                chatError.style.display = 'block';
+            }
+
+            function hideError() {
+                chatError.textContent = '';
+                chatError.style.display = 'none';
+            }
+
+            function scrollToBottom() {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+
+            function escapeHtml(unsafe) {
+                if (!unsafe) return '';
+                return unsafe
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function parseQuizBlock(rawText) {
+                const quizRegex = /\[QUIZ\]([\s\S]*?)\[\/QUIZ\]/gi;
+                return rawText.replace(quizRegex, function (match, p1) {
+                    const clean = p1.replace(/<\/?p>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').trim();
+                    const questionsRaw = clean.split(/(?=Q:)/gi);
+                    let quizHtml = '<div class="poetic-quiz-wrapper">';
+                    let qCount = 0;
+
+                    questionsRaw.forEach(qBlock => {
+                        if (!qBlock.trim()) return;
+
+                        const qMatch = qBlock.match(/Q:\s*([\s\S]*?)(?=[A-D]\s*[\)\.]|Answer:|Đáp án:|Explanation:|Giải thích:|$)/i);
+                        if (!qMatch) return;
+                        const questionText = qMatch[1].trim();
+
+                        const getOption = (block, letter) => {
+                            const regex = new RegExp(`[${letter}]\\s*[\\)\\.]\\s*([\\s\\S]*?)(?=[A-D]\\s*[\\)\\.]|Answer:|Đáp án:|Explanation:|Giải thích:|$|\\n)`, 'i');
+                            const m = block.match(regex);
+                            return m ? m[1].trim() : null;
+                        };
+
+                        const options = [];
+                        ['A', 'B', 'C', 'D'].forEach(letter => {
+                            const optText = getOption(qBlock, letter);
+                            if (optText) {
+                                options.push({ label: letter, text: optText });
+                            }
+                        });
+
+                        const ansMatch = qBlock.match(/(?:Answer|Đáp án):\s*([A-D])/i);
+                        const correctAnswer = ansMatch ? ansMatch[1].toUpperCase() : 'A';
+
+                        const expMatch = qBlock.match(/(?:Explanation|Giải thích):\s*([\s\S]*?)$/i);
+                        const explanation = expMatch ? expMatch[1].trim() : '';
+
+                        const qId = 'quiz_q_' + Math.random().toString(36).substring(2, 9);
+                        qCount++;
+
+                        quizHtml += `
+                            <div class="poetic-quiz-card" id="${qId}" data-correct="${correctAnswer}">
+                                <div class="poetic-quiz-qtext"><b>Câu hỏi ${qCount}:</b> ${questionText}</div>
+                                <div class="poetic-quiz-options">
+                        `;
+
+                        options.forEach(opt => {
+                            quizHtml += `
+                                <div class="poetic-quiz-option" data-val="${opt.label}">
+                                    <span class="poetic-quiz-opt-letter">${opt.label}</span>
+                                    <span class="poetic-quiz-opt-text">${opt.text}</span>
+                                </div>
+                            `;
+                        });
+
+                        quizHtml += `
+                                </div>
+                                <button type="button" class="poetic-quiz-submit btn-poetic-quiz" disabled>Kiểm tra đáp án</button>
+                                <div class="poetic-quiz-explanation" style="display: none;">
+                                    <div class="poetic-quiz-result-header"></div>
+                                    <p>${explanation}</p>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    quizHtml += '</div>';
+                    return quizHtml;
+                });
+            }
+
+            function parseFlashcardsBlock(rawText) {
+                const fcRegex = /\[FLASHCARDS\]([\s\S]*?)\[\/FLASHCARDS\]/gi;
+                return rawText.replace(fcRegex, function (match, p1) {
+                    const clean = p1.replace(/<\/?p>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').trim();
+                    const cardsRaw = clean.split(/(?=Front:)/gi);
+                    let fcHtml = '<div class="poetic-flashcards-container">';
+
+                    cardsRaw.forEach(cBlock => {
+                        if (!cBlock.trim()) return;
+
+                        const frontMatch = cBlock.match(/Front:\s*([\s\S]*?)(?=Back:|$)/i);
+                        const backMatch = cBlock.match(/Back:\s*([\s\S]*?)$/i);
+
+                        if (!frontMatch || !backMatch) return;
+
+                        const frontText = frontMatch[1].trim();
+                        const backText = backMatch[1].trim();
+
+                        fcHtml += `
+                            <div class="poetic-flashcard">
+                                <div class="poetic-flashcard-inner">
+                                    <div class="poetic-flashcard-front">
+                                        <h4>${frontText}</h4>
+                                        <span>Click to Reveal</span>
+                                    </div>
+                                    <div class="poetic-flashcard-back">
+                                        <p>${backText}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    fcHtml += '</div>';
+                    return fcHtml;
+                });
+            }
+
+            function initInteractiveWidgets($container) {
+                // Quiz option click handler
+                $container.find('.poetic-quiz-option').off('click').on('click', function () {
+                    const $option = $(this);
+                    const $card = $option.closest('.poetic-quiz-card');
+
+                    if ($card.hasClass('checked')) return;
+
+                    $card.find('.poetic-quiz-option').removeClass('selected');
+                    $option.addClass('selected');
+                    $card.find('.poetic-quiz-submit').prop('disabled', false);
+                });
+
+                // Quiz check button click handler
+                $container.find('.poetic-quiz-submit').off('click').on('click', function () {
+                    const $btn = $(this);
+                    const $card = $btn.closest('.poetic-quiz-card');
+                    const selectedVal = $card.find('.poetic-quiz-option.selected').data('val');
+                    const correctVal = $card.data('correct');
+
+                    if (!selectedVal) return;
+
+                    $card.addClass('checked');
+                    $btn.hide();
+
+                    const $explanation = $card.find('.poetic-quiz-explanation');
+                    const $resultHeader = $card.find('.poetic-quiz-result-header');
+
+                    $card.find('.poetic-quiz-option').each(function () {
+                        const $opt = $(this);
+                        const val = $opt.data('val');
+                        if (val === correctVal) {
+                            $opt.addClass('correct');
+                        } else if (val === selectedVal) {
+                            $opt.addClass('incorrect');
+                        }
+                    });
+
+                    if (selectedVal === correctVal) {
+                        $resultHeader.html('<span class="status-correct"><i class="ph-fill ph-check-circle"></i> Chính xác!</span>').addClass('text-success');
+                    } else {
+                        $resultHeader.html(`<span class="status-incorrect"><i class="ph-fill ph-x-circle"></i> Sai rồi (Đáp án đúng là ${correctVal})</span>`).addClass('text-danger');
+                    }
+
+                    $explanation.slideDown(250);
+                });
+
+                // Flashcard flip
+                $container.find('.poetic-flashcard').off('click').on('click', function () {
+                    $(this).toggleClass('flipped');
+                });
+
+                // Bookmark button state & click handler
+                const bookmarks = getBookmarks();
+                $container.find('.poetic-msg-bookmark-btn').each(function () {
+                    const $btn = $(this);
+                    const $msg = $btn.closest('.poetic-message');
+                    const textContent = $msg.find('.parsed-content').text().trim();
+                    const isBookmarked = bookmarks.some(b => b.textContent === textContent);
+                    if (isBookmarked) {
+                        $btn.addClass('bookmarked');
+                        $btn.find('i').removeClass('ph-light').addClass('ph-fill');
+                    } else {
+                        $btn.removeClass('bookmarked');
+                        $btn.find('i').removeClass('ph-fill').addClass('ph-light');
+                    }
+                });
+
+                $container.find('.poetic-msg-bookmark-btn').off('click').on('click', function () {
+                    const $btn = $(this);
+                    const $msg = $btn.closest('.poetic-message');
+                    const htmlContent = $msg.find('.parsed-content').html() || '';
+                    const textContent = $msg.find('.parsed-content').text().trim();
+                    const courseName = $('#courseSelect option:selected').text() || 'Học liệu';
+                    const title = courseName + ' - ' + new Date().toLocaleDateString('vi-VN');
+
+                    let currentBookmarks = getBookmarks();
+                    const index = currentBookmarks.findIndex(b => b.textContent === textContent);
+                    if (index > -1) {
+                        currentBookmarks.splice(index, 1);
+                        $btn.removeClass('bookmarked');
+                        $btn.find('i').removeClass('ph-fill').addClass('ph-light');
+                    } else {
+                        const id = 'bm_' + Date.now();
+                        currentBookmarks.push({ id, title, htmlContent, textContent });
+                        $btn.addClass('bookmarked');
+                        $btn.find('i').removeClass('ph-light').addClass('ph-fill');
+                    }
+                    saveBookmarks(currentBookmarks);
+                    updateBookmarkBadge();
+                    loadNotebookBookmarks();
+                });
+            }
+
+            // Bookmark / Notebook helper functions
+            function getBookmarks() {
+                try {
+                    return JSON.parse(localStorage.getItem('poetic_bookmarks') || '[]');
+                } catch (e) {
+                    return [];
+                }
+            }
+
+            function saveBookmarks(bookmarks) {
+                localStorage.setItem('poetic_bookmarks', JSON.stringify(bookmarks));
+            }
+
+            function updateBookmarkBadge() {
+                const count = getBookmarks().length;
+                $('#bookmarkCount').text(count);
+            }
+
+            function loadNotebookBookmarks() {
+                const content = $('#notebookDrawerContent');
+                const bookmarks = getBookmarks();
+                content.empty();
+
+                if (bookmarks.length === 0) {
+                    content.html('<div class="poetic-drawer-empty"><i class="ph-light ph-notebook"></i>Sổ tay đang trống.<br><span style="font-size: 12px; color: #8A7A6A;">Di chuột vào câu trả lời của AI và chọn biểu tượng lưu để lưu lại.</span></div>');
+                    return;
+                }
+
+                bookmarks.forEach(b => {
+                    content.append(`
+                        <div class="poetic-notebook-card" data-id="${b.id}">
+                            <h4>${escapeHtml(b.title)}</h4>
+                            <div class="poetic-notebook-card-content" style="max-height: 150px; overflow-y: auto; margin-bottom: 10px;">
+                                ${b.htmlContent}
+                            </div>
+                            <div class="poetic-notebook-card-actions">
+                                <button class="poetic-notebook-card-btn btn-copy" data-id="${b.id}">
+                                    <i class="ph-light ph-copy"></i> Sao chép
+                                </button>
+                                <button class="poetic-notebook-card-btn btn-delete" data-id="${b.id}">
+                                    <i class="ph-light ph-trash"></i> Xóa
+                                </button>
+                            </div>
+                        </div>
+                    `);
+                });
+
+                // Bind copy action
+                content.find('.btn-copy').on('click', function () {
+                    const id = $(this).data('id');
+                    const item = getBookmarks().find(x => x.id === id);
+                    if (item) {
+                        const textToCopy = item.textContent;
+                        const $btn = $(this);
+                        navigator.clipboard.writeText(textToCopy).then(() => {
+                            const originalText = $btn.html();
+                            $btn.html('<i class="ph-fill ph-check-circle" style="color: #28a745;"></i> Đã chép');
+                            setTimeout(() => {
+                                $btn.html(originalText);
+                            }, 1500);
+                        });
+                    }
+                });
+
+                // Bind delete action
+                content.find('.btn-delete').on('click', function () {
+                    const id = $(this).data('id');
+                    let bookmarksList = getBookmarks();
+                    const item = bookmarksList.find(x => x.id === id);
+                    bookmarksList = bookmarksList.filter(x => x.id !== id);
+                    saveBookmarks(bookmarksList);
+                    updateBookmarkBadge();
+                    loadNotebookBookmarks();
+
+                    // Find corresponding bookmark buttons in main chat and reset icon
+                    if (item) {
+                        $('.poetic-message.assistant').each(function () {
+                            const $msg = $(this);
+                            const textContent = $msg.find('.parsed-content').text().trim();
+                            if (textContent === item.textContent) {
+                                const $btn = $msg.find('.poetic-msg-bookmark-btn');
+                                $btn.removeClass('bookmarked');
+                                $btn.find('i').removeClass('ph-fill').addClass('ph-light');
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Focus mode keeps the chat centered and hides secondary chrome.
+            function applyFocusMode(isFocusMode) {
+                $('.app-shell').toggleClass('poetic-zen', isFocusMode);
+                $('body').toggleClass('chat-focus-mode', isFocusMode);
+                $('#zenModeBtn')
+                    .attr('aria-pressed', isFocusMode ? 'true' : 'false')
+                    .attr('title', isFocusMode ? 'Thoát chế độ tập trung' : 'Chế độ tập trung');
+
+                if (isFocusMode) {
+                    $('#zenIcon').removeClass('ph-eye-slash').addClass('ph-eye');
+                    $('#zenText').text('Thoát tập trung');
+                } else {
+                    $('#zenIcon').removeClass('ph-eye').addClass('ph-eye-slash');
+                    $('#zenText').text('Tập trung');
+                }
+
+                window.localStorage.setItem('chatFocusMode', isFocusMode ? '1' : '0');
+                window.setTimeout(scrollToBottom, 240);
+            }
+
+            applyFocusMode(window.localStorage.getItem('chatFocusMode') === '1');
+
+            $('#zenModeBtn').on('click', function () {
+                applyFocusMode(!$('.app-shell').hasClass('poetic-zen'));
+                questionInput.focus();
+            });
+
+            // Notebook Drawer Handlers
+            const notebookDrawer = $('#notebookDrawer');
+            const notebookDrawerBackdrop = $('#notebookDrawerBackdrop');
+
+            $('#openNotebookDrawerBtn').on('click', function () {
+                loadNotebookBookmarks();
+                notebookDrawer.addClass('open');
+                notebookDrawerBackdrop.fadeIn(200);
+            });
+
+            $('#closeNotebookDrawerBtn, #notebookDrawerBackdrop').on('click', function () {
+                notebookDrawer.removeClass('open');
+                notebookDrawerBackdrop.fadeOut(200);
+            });
+
+            // Init badge count on load
+            updateBookmarkBadge();
+        });
+    </script>
+}
+

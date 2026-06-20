@@ -1,0 +1,267 @@
+@page "/Document/Details/{id:int}"
+@using PRN222.Web.Infrastructure
+@model PRN222.Web.Pages.Document.DetailsModel
+@{
+    ViewData["Title"] = Model.Document.OriginalFileName;
+    var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var canViewChunks = Model.CanViewChunks;
+    var isCompleted = string.Equals(Model.Document.Status, "Indexed", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Model.Document.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+    var isProcessing = string.Equals(Model.Document.Status, "Processing", StringComparison.OrdinalIgnoreCase);
+    var isFailed = string.Equals(Model.Document.Status, "Failed", StringComparison.OrdinalIgnoreCase);
+
+    string StatusClass(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "indexed" => "status-good",
+            "completed" => "status-good",
+            "processing" => "status-running",
+            "failed" => "status-bad",
+            _ => "status-muted"
+        };
+    }
+
+    string StatusText(string status)
+    {
+        return status?.ToLowerInvariant() switch
+        {
+            "indexed" => "Đã index",
+            "completed" => "Đã index",
+            "processing" => "Đang xử lý",
+            "failed" => "Lỗi xử lý",
+            _ => status ?? "Chưa rõ"
+        };
+    }
+
+    string FormatSize(long bytes)
+    {
+        if (bytes >= 1024 * 1024) return $"{bytes / 1024d / 1024d:0.0} MB";
+        if (bytes >= 1024) return $"{bytes / 1024d:0.0} KB";
+        return $"{bytes} B";
+    }
+
+    string StepClass(bool done, bool active, bool failed = false)
+    {
+        if (failed) return "failed";
+        if (done) return "done";
+        if (active) return "active";
+        return string.Empty;
+    }
+}
+
+<a asp-page="/Document/Index" class="evaluation-back-link fade-in-up">
+    <i class="bi bi-arrow-left"></i> Quay lại Knowledge Base
+</a>
+
+<section class="ops-hero document-detail-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Document profile</span>
+        <h1>@Model.Document.OriginalFileName</h1>
+        <p>
+            Tài liệu thuộc môn @Model.Document.CourseName. Đây là nguồn được chunk và đưa vào vector search để RAG trả lời có dẫn chứng.
+        </p>
+    </div>
+    <div class="hero-action-stack">
+        @if (canUploadDocuments && !isCompleted && !isProcessing)
+        {
+            <form asp-page-handler="Process" asp-route-id="@Model.Document.Id" method="post">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-play-circle"></i> Xử lý tài liệu
+                </button>
+            </form>
+        }
+        @if (canUploadDocuments)
+        {
+            <form asp-page-handler="Delete"
+                  asp-route-id="@Model.Document.Id"
+                  method="post"
+                  class="js-toast-confirm-form"
+                  data-toast-confirm="true"
+                  data-confirm-title="Xác nhận xóa tài liệu"
+                  data-confirm-action="Xóa tài liệu"
+                  data-confirm-message="Xóa tài liệu sẽ gỡ nguồn đã index và không thể hoàn tác trong bản demo này.">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-danger">
+                    <i class="bi bi-trash3"></i> Xóa
+                </button>
+            </form>
+        }
+    </div>
+</section>
+
+@if (isFailed && !string.IsNullOrWhiteSpace(Model.Document.ErrorMessage))
+{
+    <div class="inline-alert inline-alert-danger fade-in-up">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>@Model.Document.ErrorMessage</span>
+    </div>
+}
+
+<section class="document-detail-layout fade-in-up" style="animation-delay: .06s;">
+    <aside class="document-facts">
+        <article class="document-fact-card">
+            <span>Status</span>
+            <strong class="evaluation-status @StatusClass(Model.Document.Status)">@StatusText(Model.Document.Status)</strong>
+        </article>
+        <article class="document-fact-card">
+            <span>Chunks</span>
+            <strong>@Model.Document.ChunkCount</strong>
+            <small>Đoạn văn bản dùng cho retrieval</small>
+        </article>
+        <article class="document-fact-card">
+            <span>File size</span>
+            <strong>@FormatSize(Model.Document.FileSize)</strong>
+            <small>@Model.Document.ContentType</small>
+        </article>
+        <article class="document-fact-card">
+            <span>Chunking</span>
+            <strong>@(string.IsNullOrWhiteSpace(Model.Document.ChunkingStrategy) ? "Default" : Model.Document.ChunkingStrategy)</strong>
+            <small>@Model.Document.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+        </article>
+    </aside>
+
+    <div class="document-detail-main">
+        <section class="workspace-panel">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Ingestion pipeline</span>
+                    <h2>Trạng thái xử lý tài liệu</h2>
+                    <p>Theo dõi tài liệu đi từ upload đến lúc sẵn sàng được RAG truy xuất.</p>
+                </div>
+            </div>
+            <div class="document-pipeline">
+                <div class="@StepClass(true, false)">
+                    <i class="bi bi-cloud-check"></i>
+                    <strong>Upload</strong>
+                    <small>File đã vào hệ thống</small>
+                </div>
+                <div class="@StepClass(isCompleted || Model.Document.ChunkCount > 0, isProcessing, isFailed)">
+                    <i class="bi bi-file-earmark-text"></i>
+                    <strong>Extract</strong>
+                    <small>Đọc nội dung từ tài liệu</small>
+                </div>
+                <div class="@StepClass(Model.Document.ChunkCount > 0, isProcessing && Model.Document.ChunkCount == 0, isFailed)">
+                    <i class="bi bi-layers"></i>
+                    <strong>Chunk</strong>
+                    <small>Chia nhỏ thành đoạn tìm kiếm</small>
+                </div>
+                <div class="@StepClass(isCompleted, isProcessing && Model.Document.ChunkCount > 0, isFailed)">
+                    <i class="bi bi-diagram-3"></i>
+                    <strong>Embedding</strong>
+                    <small>Lưu vector vào knowledge base</small>
+                </div>
+                <div class="@StepClass(isCompleted, false, isFailed)">
+                    <i class="bi bi-chat-square-quote"></i>
+                    <strong>Ready</strong>
+                    <small>Có thể dùng trong chat</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="workspace-panel">
+            <div class="workspace-panel-header">
+                <div>
+                    <span class="section-kicker">Extracted text</span>
+                    <h2>Nội dung trích xuất</h2>
+                    <p>Preview giúp kiểm tra lỗi OCR/encoding trước khi đưa vào retrieval.</p>
+                </div>
+            </div>
+            @if (!canViewChunks)
+            {
+                <div class="inline-alert inline-alert-danger mb-0">
+                    <i class="bi bi-lock"></i>
+                    <span>Tài khoản giảng viên chỉ được xem metadata tài liệu, không được xem nội dung trích xuất hoặc chunk.</span>
+                </div>
+            }
+            else
+            {
+                <div class="document-preview-box">
+                    @if (string.IsNullOrWhiteSpace(Model.Document.ExtractedTextPreview))
+                    {
+                        <p class="text-muted mb-0">Chưa có nội dung trích xuất để hiển thị.</p>
+                    }
+                    else
+                    {
+                        <p>@Model.Document.ExtractedTextPreview</p>
+                    }
+                </div>
+            }
+        </section>
+
+        @if (canViewChunks)
+        {
+            <section class="workspace-panel">
+                <div class="workspace-panel-header">
+                    <div>
+                        <span class="section-kicker">Chunks</span>
+                        <h2>Evidence chunks</h2>
+                        <p>Các chunk bên dưới là đơn vị được vector search trả về khi người dùng hỏi.</p>
+                    </div>
+                </div>
+                @if (!Model.Document.Chunks.Any())
+                {
+                    <div class="empty-state compact">
+                        <i class="bi bi-layers"></i>
+                        <h3>Chưa có chunk</h3>
+                        <p>Hãy chạy xử lý tài liệu để tạo chunk và embedding.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="document-chunk-list">
+                        @foreach (var chunk in Model.Document.Chunks.OrderBy(x => x.ChunkIndex))
+                        {
+                            <article class="document-chunk-card">
+                                <div class="document-chunk-head">
+                                    <strong>Chunk @chunk.ChunkIndex</strong>
+                                    <span>@chunk.TokenCount tokens</span>
+                                </div>
+                                <p>@chunk.Content</p>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        }
+    </div>
+</section>
+
+@section Scripts {
+    <script src="~/js/governance.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('.js-toast-confirm-form[data-toast-confirm="true"]').forEach(function (form) {
+                if (form.dataset.toastConfirmBound === 'true') {
+                    return;
+                }
+
+                form.dataset.toastConfirmBound = 'true';
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+
+                    if (!window.GovernancePage?.showGovernanceConfirmToast) {
+                        form.submit();
+                        return;
+                    }
+
+                    window.GovernancePage.showGovernanceConfirmToast({
+                        title: form.dataset.confirmTitle || 'Xác nhận thao tác',
+                        message: form.dataset.confirmMessage || 'Bạn có chắc chắn muốn tiếp tục?',
+                        actionLabel: form.dataset.confirmAction || 'Tiếp tục',
+                        onConfirm: function () {
+                            form.submit();
+                        }
+                    });
+                });
+            });
+
+            @if (isProcessing)
+            {
+                <text>window.setTimeout(function () { window.location.reload(); }, 5000);</text>
+            }
+        });
+    </script>
+}
+

@@ -1,0 +1,236 @@
+@page "/Document/Upload"
+@using PRN222.Web.Infrastructure
+@model PRN222.Web.Pages.Document.UploadModel
+@{
+    ViewData["Title"] = "Nạp tài liệu";
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var courses = Model.Courses.ToList();
+    var hasCourses = courses.Any();
+}
+
+<section class="ops-hero knowledge-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Ingestion</span>
+        <h1>Nạp tài liệu vào kho tri thức</h1>
+        <p>Chọn môn học, tải lên PDF/DOCX/PPTX/PPT, sau đó xử lý tài liệu để tạo chunk và embedding cho Chat RAG.</p>
+    </div>
+    <div class="hero-action-stack">
+        <a asp-page="/Document/Index" class="btn btn-outline-primary">
+            <i class="bi bi-database"></i>
+            <span>Kho tri thức</span>
+        </a>
+    </div>
+</section>
+
+<section class="document-upload-layout fade-in-up stagger-1">
+    <main class="workspace-panel document-upload-panel">
+        <div class="workspace-panel-header">
+            <div>
+                <span class="section-kicker">Source material</span>
+                <h2>Thông tin tài liệu</h2>
+                <p>Tài liệu sau khi upload sẽ ở trạng thái chờ xử lý. Vào trang chi tiết để bắt đầu process.</p>
+            </div>
+        </div>
+
+        @if (TempData["Error"] != null)
+        {
+            <div class="inline-alert inline-alert-danger" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>@TempData["Error"]</span>
+            </div>
+        }
+
+        <div id="uploadMessage" class="inline-alert inline-alert-danger d-none" role="alert"></div>
+        @if (!hasCourses)
+        {
+            <div class="inline-alert inline-alert-danger" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span>
+                    @(isAdmin
+                        ? "Chưa có môn học. Hãy tạo môn trước khi nạp tài liệu."
+                        : "Chưa có môn học được phân công để nạp tài liệu. Vui lòng liên hệ Admin để gán môn.")
+                </span>
+            </div>
+        }
+
+        <form method="post" enctype="multipart/form-data" class="document-upload-form">
+            @Html.AntiForgeryToken()
+
+            <div class="document-upload-field">
+                <label for="courseId">Môn học <span class="text-danger">*</span></label>
+                <div class="document-course-picker">
+                    <select name="courseId" id="courseId" class="form-select" required disabled="@(!hasCourses)">
+                        <option value="">Chọn môn học</option>
+                        @foreach (var course in courses)
+                        {
+                            <option value="@course.Id">@course.Name</option>
+                        }
+                    </select>
+                    @if (isAdmin)
+                    {
+                        <a class="btn btn-outline-primary" asp-page="/Course/Create">
+                            <i class="bi bi-plus-lg"></i>
+                            <span>Thêm môn</span>
+                        </a>
+                    }
+                </div>
+                <small>@(isAdmin ? "Admin có thể mở form tạo môn mới và chọn Khoa phụ trách ngay từ đây." : "Trưởng bộ môn chỉ nạp tài liệu vào các môn được Admin phân công.")</small>
+            </div>
+
+            <div class="document-upload-field">
+                <label for="file">Tệp tài liệu <span class="text-danger">*</span></label>
+                <label class="document-file-drop" for="file">
+                    <i class="bi bi-cloud-arrow-up"></i>
+                    <span>Chọn hoặc kéo thả file vào đây</span>
+                    <small>Hỗ trợ PDF, DOCX, PPTX, PPT. Tối đa 50 MB.</small>
+                </label>
+                <input type="file" name="file" id="file" class="visually-hidden" accept=".pdf,.docx,.pptx,.ppt" required />
+            </div>
+
+            <div id="filePreview" class="document-file-preview d-none">
+                <i id="fileIcon" class="bi"></i>
+                <div>
+                    <strong id="fileName"></strong>
+                    <small id="fileSize"></small>
+                </div>
+            </div>
+
+            <div id="sizeWarning" class="inline-alert inline-alert-danger d-none">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>File vượt quá giới hạn 50 MB. Vui lòng chọn file nhỏ hơn.</span>
+            </div>
+
+            <div class="document-upload-actions">
+                <button type="submit" id="submitBtn" class="btn btn-primary" disabled="@(!hasCourses)">
+                    <i class="bi bi-upload"></i>
+                    <span>Nạp tài liệu</span>
+                </button>
+                <a asp-page="/Document/Index" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Quay lại kho tri thức</span>
+                </a>
+            </div>
+        </form>
+    </main>
+
+    <aside class="workspace-panel document-upload-guide">
+        <span class="section-kicker">Pipeline</span>
+        <h2>Luồng xử lý sau upload</h2>
+        <div class="document-upload-steps">
+            <div class="active">
+                <i class="bi bi-journal-bookmark"></i>
+                <strong>1. Chọn môn học</strong>
+                <span>Khoanh vùng tài liệu cho Chat RAG.</span>
+            </div>
+            <div>
+                <i class="bi bi-file-earmark-arrow-up"></i>
+                <strong>2. Upload file</strong>
+                <span>Lưu bản gốc và metadata vào hệ thống.</span>
+            </div>
+            <div>
+                <i class="bi bi-layers"></i>
+                <strong>3. Process document</strong>
+                <span>Extract text, chia chunk và tạo embedding.</span>
+            </div>
+            <div>
+                <i class="bi bi-chat-dots"></i>
+                <strong>4. Ready for chat</strong>
+                <span>Tài liệu có thể được truy xuất làm evidence.</span>
+            </div>
+        </div>
+    </aside>
+</section>
+
+<div id="documentUploadToast" class="app-toast d-none" role="status" aria-live="polite"></div>
+
+@section Scripts {
+    <script>
+        const fileInput = document.getElementById('file');
+        const preview = document.getElementById('filePreview');
+        const sizeWarning = document.getElementById('sizeWarning');
+        const submitBtn = document.getElementById('submitBtn');
+        const fileSizeText = document.getElementById('fileSize');
+        const uploadMessage = document.getElementById('uploadMessage');
+        const courseSelect = document.getElementById('courseId');
+        const maxBytes = 50 * 1024 * 1024;
+
+        function showInlineMessage(target, message) {
+            target.innerHTML = `<i class="bi bi-exclamation-triangle"></i><span>${escapeHtml(message)}</span>`;
+            target.classList.remove('d-none');
+        }
+
+        function hideInlineMessage(target) {
+            target.textContent = '';
+            target.classList.add('d-none');
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function updateSubmitState() {
+            const file = fileInput.files[0];
+            submitBtn.disabled = !courseSelect.value || !file || file.size > maxBytes;
+        }
+
+        fileInput.addEventListener('change', function (event) {
+            const file = event.target.files[0];
+
+            if (file) {
+                preview.classList.remove('d-none');
+                document.getElementById('fileName').textContent = file.name;
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                fileSizeText.textContent = `${sizeMB} MB`;
+
+                const icon = document.getElementById('fileIcon');
+                icon.className = 'bi';
+                if (file.name.endsWith('.pdf')) {
+                    icon.classList.add('bi-file-earmark-pdf', 'text-danger');
+                } else if (file.name.endsWith('.docx')) {
+                    icon.classList.add('bi-file-earmark-word', 'text-primary');
+                } else if (file.name.endsWith('.pptx') || file.name.endsWith('.ppt')) {
+                    icon.classList.add('bi-file-earmark-slides', 'text-warning');
+                } else {
+                    icon.classList.add('bi-file-earmark', 'text-secondary');
+                }
+
+                if (file.size > maxBytes) {
+                    sizeWarning.classList.remove('d-none');
+                    fileSizeText.classList.add('text-danger', 'fw-bold');
+                } else {
+                    sizeWarning.classList.add('d-none');
+                    fileSizeText.classList.remove('text-danger', 'fw-bold');
+                }
+            } else {
+                preview.classList.add('d-none');
+                sizeWarning.classList.add('d-none');
+            }
+
+            updateSubmitState();
+        });
+
+        document.querySelector('.document-upload-form').addEventListener('submit', function (event) {
+            hideInlineMessage(uploadMessage);
+
+            if (!courseSelect.value) {
+                event.preventDefault();
+                showInlineMessage(uploadMessage, 'Vui lòng chọn môn học trước khi nạp tài liệu.');
+                return;
+            }
+
+            if (!fileInput.files.length) {
+                event.preventDefault();
+                showInlineMessage(uploadMessage, 'Vui lòng chọn file tài liệu.');
+            }
+        });
+
+        courseSelect.addEventListener('change', updateSubmitState);
+        updateSubmitState();
+    </script>
+}
+

@@ -1,0 +1,97 @@
+@model IEnumerable<PRN222.BLL.DTOs.CourseDto>
+@{
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var courses = Model?.ToList() ?? new List<PRN222.BLL.DTOs.CourseDto>();
+}
+
+@if (!courses.Any())
+{
+    <div class="empty-state">
+        <i class="bi bi-journal-plus"></i>
+        <h3>Chua co mon hoc nao</h3>
+        @if (isAdmin)
+        {
+            <p>Tao mon dau tien truoc khi upload tai lieu bai giang.</p>
+            <a asp-page="/Course/Create" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Them mon hoc
+            </a>
+        }
+        else
+        {
+            <p>Ban chua duoc Admin cap nhat phan cong mon hoc.</p>
+        }
+    </div>
+}
+else
+{
+    <div class="course-grid" id="courseGrid" data-is-admin="@isAdmin.ToString().ToLowerInvariant()">
+        @foreach (var course in courses)
+        {
+            var hasDocuments = course.DocumentCount > 0;
+            <article class="course-card" id="course-card-@course.Id" data-course-id="@course.Id">
+                <div class="course-card-head">
+                    <div class="course-icon">
+                        <i class="bi bi-journal-richtext"></i>
+                    </div>
+                    <div>
+                        <h3>@course.Name</h3>
+                        <p>@(string.IsNullOrWhiteSpace(course.Description) ? "Chua co mo ta cho mon hoc nay." : course.Description)</p>
+                    </div>
+                </div>
+
+                <div class="course-meta">
+                    <span><i class="bi bi-building"></i> @(course.DepartmentName ?? "Chua gan Khoa")</span>
+                    <span><i class="bi bi-file-earmark-text"></i> @course.DocumentCount tai lieu</span>
+                    <span><i class="bi bi-clock"></i> @course.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                </div>
+
+                <div class="course-actions">
+                    <a asp-page="/Document/Index" asp-route-courseId="@course.Id" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-database"></i> Tai lieu
+                    </a>
+                    @if (isAdmin)
+                    {
+                        <a asp-page="/Course/Edit" asp-route-id="@course.Id" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-pencil"></i> Sua
+                        </a>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-danger"
+                                data-bs-toggle="modal"
+                                data-bs-target="#deleteModal-@course.Id"
+                                disabled="@hasDocuments"
+                                title="@(hasDocuments ? "Xoa het tai lieu truoc khi xoa mon hoc." : "Xoa mon hoc")">
+                            <i class="bi bi-trash"></i> Xoa
+                        </button>
+                    }
+                </div>
+            </article>
+
+            @if (isAdmin)
+            {
+                <div class="modal fade" id="deleteModal-@course.Id" tabindex="-1" aria-labelledby="deleteModalTitle-@course.Id" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content text-start">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="deleteModalTitle-@course.Id">Xoa mon hoc</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Dong"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Ban chac chan muon xoa mon hoc <strong>@course.Name</strong>?</p>
+                                <p class="text-danger mb-0">Hanh dong nay khong the hoan tac.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Huy</button>
+                                <form asp-page="/Course/Index" asp-page-handler="Delete" asp-route-id="@course.Id" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="bi bi-trash"></i> Xoa mon hoc
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+}

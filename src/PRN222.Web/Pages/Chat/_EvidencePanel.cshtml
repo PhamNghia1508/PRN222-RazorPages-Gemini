@@ -1,0 +1,46 @@
+@model IEnumerable<PRN222.BLL.DTOs.ChatCitationDto>
+
+@{
+    var citations = Model?.ToList() ?? new List<PRN222.BLL.DTOs.ChatCitationDto>();
+}
+
+<aside class="chat-evidence-panel" aria-label="Ngữ cảnh truy xuất" style="height: 100%; max-height: 100%; display: flex; flex-direction: column; overflow: hidden; position: static; box-sizing: border-box; background: var(--sand-50); border: 1px solid var(--sand-300); border-radius: 8px;">
+    <div class="chat-evidence-header" style="flex-shrink: 0; padding-bottom: 10px; border-bottom: 1px dashed rgba(166, 124, 82, 0.15); margin-bottom: 12px;">
+        <div>
+            <span class="section-eyebrow" style="color: var(--accent-color); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Ngữ cảnh RAG</span>
+            <h2 style="font-family: var(--font-display); font-weight: 600; color: var(--ink-900); font-size: 16px;">Minh Chứng Phù Hợp</h2>
+        </div>
+        <span class="chat-evidence-count" style="background: var(--accent-color); color: #fff; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 8px;">@citations.Count</span>
+    </div>
+
+    <div id="retrievedContextList" class="chat-evidence-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
+        @if (citations.Any())
+        {
+            @foreach (var citation in citations)
+            {
+                <article class="chat-evidence-card" style="background: #fff; border: 1px solid var(--sand-300); border-radius: 8px; padding: 12px; transition: all 0.2s;">
+                    <div class="chat-evidence-card-top" style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 6px;">
+                        <span class="chat-evidence-score" style="color: var(--accent-color); font-weight: 700;">Độ tương đồng: @citation.RelevanceScore.ToString("P0")</span>
+                        <span class="chat-evidence-page" style="color: #8A7A6A; font-weight: 500;">Trang @citation.StartPage</span>
+                    </div>
+                    <strong style="display: block; font-size: 13px; color: var(--ink-900); margin-bottom: 4px; font-family: var(--font-display);">@citation.DocumentName</strong>
+                    <p style="font-size: 12.5px; color: var(--ink-800); line-height: 1.5; margin: 0;">@citation.SnippetText</p>
+                    @if (!string.IsNullOrWhiteSpace(citation.ImageUrl))
+                    {
+                        <div class="citation-image-wrapper image-zoom-trigger" data-image-url="@citation.ImageUrl" style="margin-top: 8px;">
+                            <img src="@citation.ImageUrl" class="citation-thumbnail" alt="Minh chứng trích dẫn" />
+                        </div>
+                    }
+                </article>
+            }
+        }
+        else
+        {
+            <div class="chat-evidence-empty" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; color: #8A7A6A;">
+                <i class="ph-light ph-magnifying-glass" style="font-size: 48px; color: var(--accent-color); margin-bottom: 12px;"></i>
+                <h3 style="font-size: 15px; font-weight: 600; color: var(--ink-900); margin-bottom: 6px;">Chưa có ngữ cảnh</h3>
+                <p style="font-size: 13px; max-width: 240px; margin: 0; line-height: 1.4;">Đặt câu hỏi học tập để xem các đoạn tài liệu được truy xuất và độ liên quan.</p>
+            </div>
+        }
+    </div>
+</aside>

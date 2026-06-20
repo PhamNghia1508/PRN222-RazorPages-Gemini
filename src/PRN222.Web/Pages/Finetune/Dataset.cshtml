@@ -1,0 +1,225 @@
+@page "/Finetune/Dataset"
+@model PRN222.Web.Pages.Finetune.DatasetModel
+@{
+    var course = Model.Course;
+    var qas = Model.QAPairs.ToList();
+    var courseId = course?.Id ?? 0;
+    ViewData["Title"] = $"Dataset: {course?.Name}";
+
+    var totalQA = qas.Count;
+    var linkedChunks = qas.Count(x => x.DocumentChunkId.HasValue);
+    var avgRelevance = qas.Any() ? qas.Average(x => x.RelevanceScore) : 0.0;
+    var avgQuestionWords = qas.Any()
+        ? qas.Average(x => x.Question.Split(new[] { ' ', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length)
+        : 0.0;
+}
+
+<a asp-page="/Finetune/Index" class="evaluation-back-link fade-in-up">
+    <i class="bi bi-arrow-left"></i>
+    <span>Quay lại Fine-tuning Data</span>
+</a>
+
+@Html.AntiForgeryToken()
+
+<section class="ops-hero finetune-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Training dataset</span>
+        <h1>@course?.Name</h1>
+        <p>
+            Bộ Q&A này được sinh từ tài liệu môn học, dùng để xuất JSONL và huấn luyện fine-tuned model trước khi benchmark.
+        </p>
+    </div>
+    <div class="hero-action-stack">
+        <button id="btnGenerate" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateDatasetModal">
+            <i class="bi bi-stars"></i>
+            <span>Sinh thêm Q&A</span>
+        </button>
+        <a asp-page="/Finetune/Dataset" asp-page-handler="Export" asp-route-courseId="@courseId" class="btn btn-outline-primary">
+            <i class="bi bi-download"></i>
+            <span>Xuất JSONL</span>
+        </a>
+    </div>
+</section>
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="inline-alert inline-alert-danger fade-in-up">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>@TempData["ErrorMessage"]</span>
+    </div>
+}
+
+<section class="finetune-dataset-grid fade-in-up stagger-1">
+    <article class="finetune-stat-card">
+        <span>Tổng Q&A đã sinh</span>
+        <strong>@totalQA</strong>
+        <small>Cặp dữ liệu trong môn</small>
+    </article>
+    <article class="finetune-stat-card">
+        <span>Độ bao phủ học liệu</span>
+        <strong>@linkedChunks</strong>
+        <small>Số chunk liên kết trích dẫn</small>
+    </article>
+    <article class="finetune-stat-card">
+        <span>Độ dài câu hỏi</span>
+        <strong>@avgQuestionWords.ToString("F1") từ</strong>
+        <small>Trung bình số từ câu hỏi</small>
+    </article>
+    <article class="finetune-stat-card accent">
+        <span>Độ liên quan trung bình</span>
+        <strong>@avgRelevance.ToString("0.00")</strong>
+        <small>Điểm chất lượng từ AI</small>
+    </article>
+</section>
+
+<div id="progressContainer" class="finetune-job-panel fade-in-up d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <div>
+        <strong>AI đang đọc tài liệu và sinh Q&A...</strong>
+        <p id="progressStatus">Quá trình này có thể mất vài phút. Bạn có thể để nguyên trang trong lúc chạy.</p>
+    </div>
+</div>
+
+<section class="workspace-panel fade-in-up stagger-2">
+    <div class="workspace-panel-header">
+        <div>
+            <span class="section-kicker">Dataset preview</span>
+            <h2>Các cặp hỏi đáp đã sinh</h2>
+            <p>Kiểm tra câu hỏi, câu trả lời và nguồn chunk trước khi xuất dữ liệu huấn luyện.</p>
+        </div>
+    </div>
+
+    @if (!qas.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-database-x"></i>
+            <h3>Chưa có dữ liệu Q&A</h3>
+            <p>Sinh dataset từ tài liệu đã xử lý của môn học này trước khi export JSONL.</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateDatasetModal">
+                <i class="bi bi-stars"></i>
+                <span>Sinh dữ liệu đầu tiên</span>
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="finetune-qa-list">
+            @{
+                var index = 1;
+            }
+            @foreach (var qa in qas)
+            {
+                <article class="finetune-qa-card">
+                    <div class="finetune-qa-index">@index</div>
+                    <div class="finetune-qa-body">
+                        <span>Câu hỏi</span>
+                        <h3>@qa.Question</h3>
+                        <span>Đáp án mẫu</span>
+                        <p>@qa.Answer</p>
+                        <div class="finetune-qa-meta">
+                            <small><i class="bi bi-calendar3"></i> @qa.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+                            @if (qa.DocumentChunkId.HasValue)
+                            {
+                                <small><i class="bi bi-link-45deg"></i> Chunk #@qa.DocumentChunkId</small>
+                            }
+                            <small><i class="bi bi-activity"></i> Relevance @qa.RelevanceScore.ToString("0.00")</small>
+                        </div>
+                    </div>
+                </article>
+                index++;
+            }
+        </div>
+    }
+</section>
+
+<div class="modal fade" id="generateDatasetModal" tabindex="-1" aria-labelledby="generateDatasetModalTitle" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <span class="section-kicker">Generate dataset</span>
+                    <h5 class="modal-title" id="generateDatasetModalTitle">Sinh thêm Q&A cho môn học</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body">
+                <p>Hệ thống sẽ quét tài liệu đã xử lý của môn học này và sinh thêm tối đa 50 cặp Q&A.</p>
+                <p class="mb-0 text-muted">Các Q&A hiện có vẫn được giữ lại.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" id="confirmGenerateDatasetBtn" class="btn btn-primary">
+                    <i class="bi bi-stars"></i>
+                    <span>Bắt đầu sinh Q&A</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="finetuneToast" class="app-toast d-none" role="status" aria-live="polite"></div>
+
+@section Scripts {
+    <script>
+        const courseId = @courseId;
+        const targetCount = 50;
+        const generateButton = document.getElementById('btnGenerate');
+        const confirmGenerateButton = document.getElementById('confirmGenerateDatasetBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const modalElement = document.getElementById('generateDatasetModal');
+
+        function showFinetuneToast(message, isError) {
+            const toast = $('#finetuneToast');
+            toast.text(message);
+            toast.toggleClass('toast-error', Boolean(isError));
+            toast.removeClass('d-none');
+            window.clearTimeout(window.finetuneToastTimer);
+            window.finetuneToastTimer = window.setTimeout(() => toast.addClass('d-none'), 3600);
+        }
+
+        function setGenerateBusy(isBusy) {
+            generateButton.disabled = isBusy;
+            confirmGenerateButton.disabled = isBusy;
+            progressContainer.classList.toggle('d-none', !isBusy);
+            confirmGenerateButton.innerHTML = isBusy
+                ? '<span class="spinner-border spinner-border-sm"></span><span>Đang sinh...</span>'
+                : '<i class="bi bi-stars"></i><span>Bắt đầu sinh Q&A</span>';
+        }
+
+        async function generateDataset() {
+            if (!courseId) {
+                showFinetuneToast('Không tìm thấy môn học để sinh dữ liệu.', true);
+                return;
+            }
+
+            bootstrap.Modal.getInstance(modalElement)?.hide();
+            setGenerateBusy(true);
+
+            $.ajax({
+                url: '@Url.Page("/Finetune/Dataset", "GenerateAjax")',
+                type: 'POST',
+                headers: {
+                    'RequestVerificationToken': $('input[name="__RequestVerificationToken"]').val()
+                },
+                data: { courseId: courseId, targetCount: targetCount },
+                success: function (res) {
+                    if (res.success) {
+                        showFinetuneToast(res.message, false);
+                        window.setTimeout(() => location.reload(), 900);
+                    } else {
+                        showFinetuneToast('Lỗi: ' + res.message, true);
+                        setGenerateBusy(false);
+                    }
+                },
+                error: function () {
+                    showFinetuneToast('Đã xảy ra lỗi kết nối khi sinh dữ liệu.', true);
+                    setGenerateBusy(false);
+                }
+            });
+        }
+
+        confirmGenerateButton.addEventListener('click', generateDataset);
+    </script>
+}

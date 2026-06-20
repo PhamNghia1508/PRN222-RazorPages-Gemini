@@ -1,0 +1,33 @@
+@page "/Account/AccessDenied"
+@model PRN222.Web.Pages.Account.AccessDeniedModel
+
+@{
+    ViewData["Title"] = "Khong co quyen";
+}
+
+<section class="auth-page compact">
+    <div class="auth-copy">
+        <span class="section-kicker">Phan quyen</span>
+        <h1>Tai khoan nay chua duoc mo khu vuc ban chon.</h1>
+        <p>
+            Mot so thao tac nhu tao mon hoc, tao tai khoan giang vien hoac nap tai lieu
+            duoc gioi han theo vai tro Admin va Truong bo mon.
+        </p>
+    </div>
+
+    <div class="auth-card">
+        <span class="section-kicker">Truy cap bi chan</span>
+        <h2>Khong co quyen truy cap</h2>
+        <p class="auth-subtitle">Ban co the quay lai Chat RAG hoac dang nhap bang tai khoan co quyen phu hop.</p>
+        <div class="auth-action-row">
+            <a href="/Chat/Session" class="btn btn-primary">
+                <i class="bi bi-chat-dots"></i>
+                <span>Ve chat</span>
+            </a>
+            <a asp-page="/Account/Login" class="btn btn-outline-primary">
+                <i class="bi bi-box-arrow-in-right"></i>
+                <span>Dang nhap lai</span>
+            </a>
+        </div>
+    </div>
+</section>

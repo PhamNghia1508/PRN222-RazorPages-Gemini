@@ -1,0 +1,276 @@
+<mxfile host="app.diagrams.net" modified="2026-06-16T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="component-architecture-v2" name="Component Architecture - Clean">
+    <mxGraphModel dx="1900" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="PRN222 ASP.NET Core - High-Level 3-Layer Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=30;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="250" y="30" width="1400" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Main flow is separated into two lanes: REQUEST on top, RESPONSE below." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="520" y="75" width="860" height="28" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legendBg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="50" width="390" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="legendReqBox" value="REQUEST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=14;fontStyle=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1435" y="62" width="125" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legendResBox" value="RESPONSE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontColor=#15803D;fontSize=14;fontStyle=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1605" y="62" width="135" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legendReqLine" value="" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1438" y="108" as="sourcePoint" />
+            <mxPoint x="1555" y="108" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legendResLine" value="" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1608" y="108" as="sourcePoint" />
+            <mxPoint x="1728" y="108" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="requestLane" value="REQUEST LANE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=14;fontStyle=1;arcSize=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="150" width="1710" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="responseLane" value="RESPONSE LANE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FDF4;strokeColor=#86EFAC;fontColor=#15803D;fontSize=14;fontStyle=1;arcSize=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="830" width="1710" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="client" value="Client&#xa;Browser / User" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#64748B;fontColor=#0F172A;fontSize=18;fontStyle=1;spacing=12;arcSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="455" width="190" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="webLayer" value="Presentation Layer&#xa;PRN222.Web" style="swimlane;html=1;rounded=1;startSize=52;fillColor=#EFF6FF;strokeColor=#2563EB;fontColor=#1E3A8A;fontSize=21;fontStyle=1;whiteSpace=wrap;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="330" y="280" width="300" height="460" as="geometry" />
+        </mxCell>
+        <mxCell id="webMain" value="Razor Pages&#xa;PageModel Handlers&#xa;cshtml Views / JSON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BFDBFE;strokeColor=#3B82F6;fontColor=#1E3A8A;fontSize=16;fontStyle=1;spacing=10;arcSize=8;shadow=1;" vertex="1" parent="webLayer">
+          <mxGeometry x="35" y="92" width="230" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="webRealtime" value="SignalR Hub&#xa;Realtime updates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#60A5FA;fontColor=#1E3A8A;fontSize=15;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="webLayer">
+          <mxGeometry x="35" y="230" width="230" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="webAuth" value="Middleware&#xa;Routing / Static Files / Auth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#38BDF8;fontColor=#075985;fontSize=15;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="webLayer">
+          <mxGeometry x="35" y="342" width="230" height="82" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bllLayer" value="Business Logic Layer&#xa;PRN222.BLL" style="swimlane;html=1;rounded=1;startSize=52;fillColor=#F5F3FF;strokeColor=#7C3AED;fontColor=#4C1D95;fontSize=21;fontStyle=1;whiteSpace=wrap;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="720" y="280" width="330" height="460" as="geometry" />
+        </mxCell>
+        <mxCell id="bllServices" value="Application Services&#xa;Course / Department / Document / Chat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#8B5CF6;fontColor=#4C1D95;fontSize=16;fontStyle=1;spacing=10;arcSize=8;shadow=1;" vertex="1" parent="bllLayer">
+          <mxGeometry x="35" y="92" width="260" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="bllAI" value="AI Orchestration&#xa;RAG / Embedding / LLM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDD6FE;strokeColor=#7C3AED;fontColor=#4C1D95;fontSize=16;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="bllLayer">
+          <mxGeometry x="35" y="230" width="260" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="bllJobs" value="Background Processing&#xa;Queue / Hosted Worker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#A855F7;fontColor=#581C87;fontSize=16;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="bllLayer">
+          <mxGeometry x="35" y="350" width="260" height="82" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dalLayer" value="Data Access Layer&#xa;PRN222.DAL" style="swimlane;html=1;rounded=1;startSize=52;fillColor=#ECFDF5;strokeColor=#16A34A;fontColor=#14532D;fontSize=21;fontStyle=1;whiteSpace=wrap;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="280" width="300" height="460" as="geometry" />
+        </mxCell>
+        <mxCell id="dalRepos" value="Repositories&#xa;Generic + Specialized" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#14532D;fontSize=16;fontStyle=1;spacing=10;arcSize=8;shadow=1;" vertex="1" parent="dalLayer">
+          <mxGeometry x="35" y="105" width="230" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="dalUow" value="UnitOfWork&#xa;Transactions / SaveChanges" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBF7D0;strokeColor=#16A34A;fontColor=#14532D;fontSize=16;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="dalLayer">
+          <mxGeometry x="35" y="235" width="230" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="dalEf" value="EF Core DbContext&#xa;ChatbotDbContext + Identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#22C55E;fontColor=#14532D;fontSize=16;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="dalLayer">
+          <mxGeometry x="35" y="350" width="230" height="82" as="geometry" />
+        </mxCell>
+
+        <mxCell id="storageLayer" value="Storage / External Systems" style="swimlane;html=1;rounded=1;startSize=52;fillColor=#FFFBEB;strokeColor=#F59E0B;fontColor=#92400E;fontSize=21;fontStyle=1;whiteSpace=wrap;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="280" width="250" height="460" as="geometry" />
+        </mxCell>
+        <mxCell id="db" value="SQL Server&#xa;Application Database" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontColor=#92400E;fontSize=16;fontStyle=1;spacing=10;arcSize=8;shadow=1;" vertex="1" parent="storageLayer">
+          <mxGeometry x="35" y="100" width="180" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="files" value="File Storage&#xa;App_Data uploads" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE68A;strokeColor=#D97706;fontColor=#78350F;fontSize=16;fontStyle=1;spacing=10;arcSize=8;" vertex="1" parent="storageLayer">
+          <mxGeometry x="35" y="235" width="180" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="externalAI" value="External AI APIs&#xa;Gemini / OpenAI / HuggingFace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE7F3;strokeColor=#DB2777;fontColor=#831843;fontSize=16;fontStyle=1;spacing=10;arcSize=8;shadow=1;" vertex="1" parent="storageLayer">
+          <mxGeometry x="35" y="350" width="180" height="92" as="geometry" />
+        </mxCell>
+
+        <mxCell id="req1" value="1. HTTP / SignalR request" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="client" target="webLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="185" />
+              <mxPoint x="315" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="req2" value="2. Call service" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="webLayer" target="bllLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="650" y="185" />
+              <mxPoint x="700" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="req3" value="3. Repository operation" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="bllLayer" target="dalLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="185" />
+              <mxPoint x="1120" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="req4" value="4. Query / save data" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="dalLayer" target="storageLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1460" y="185" />
+              <mxPoint x="1510" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="res4" value="4. Data / commit result" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="storageLayer" target="dalLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1510" y="865" />
+              <mxPoint x="1460" y="865" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="res3" value="3. Entities / query result" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="dalLayer" target="bllLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1120" y="865" />
+              <mxPoint x="1070" y="865" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="res2" value="2. DTO / service result" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="bllLayer" target="webLayer">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="865" />
+              <mxPoint x="650" y="865" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="res1" value="1. HTML / JSON / realtime response" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="webLayer" target="client">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="315" y="865" />
+              <mxPoint x="250" y="865" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="optionalReq" value="Optional AI/file request" style="endArrow=block;html=1;rounded=0;strokeWidth=3;strokeColor=#2563EB;fontColor=#1D4ED8;fontSize=14;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="bllAI" target="externalAI">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1075" y="505" />
+              <mxPoint x="1510" y="675" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="optionalRes" value="Optional AI/file response" style="endArrow=block;html=1;rounded=0;strokeWidth=3;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=14;fontStyle=1;edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="externalAI" target="bllAI">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1510" y="735" />
+              <mxPoint x="1075" y="555" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="sequence-flow-v2" name="Request Sequence - Clean">
+    <mxGraphModel dx="1900" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="seqTitle" value="PRN222 - High-Level HTTP Request / Response Sequence" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=30;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="220" y="35" width="1460" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="seqSubtitle" value="Request goes left to right. Response returns right to left." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=16;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="590" y="82" width="720" height="28" as="geometry" />
+        </mxCell>
+
+        <mxCell id="seqRequestBand" value="REQUEST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#93C5FD;fontColor=#1D4ED8;fontSize=15;fontStyle=1;arcSize=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="255" width="1740" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="seqResponseBand" value="RESPONSE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FDF4;strokeColor=#86EFAC;fontColor=#15803D;fontSize=15;fontStyle=1;arcSize=6;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="620" width="1740" height="330" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pClient" value="Client&#xa;Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#64748B;fontColor=#0F172A;fontSize=17;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="95" y="145" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pWeb" value="Presentation&#xa;PRN222.Web" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#1E3A8A;fontSize=17;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="405" y="145" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pBLL" value="Business Logic&#xa;PRN222.BLL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontColor=#4C1D95;fontSize=17;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="735" y="145" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pDAL" value="Data Access&#xa;PRN222.DAL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontColor=#14532D;fontSize=17;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1065" y="145" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pDB" value="Database&#xa;SQL Server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#78350F;fontSize=17;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1390" y="145" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pAI" value="External APIs&#xa;AI providers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE7F3;strokeColor=#DB2777;fontColor=#831843;fontSize=17;fontStyle=1;arcSize=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1630" y="145" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="life1" value="" style="shape=line;html=1;strokeColor=#94A3B8;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="230" width="1" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="life2" value="" style="shape=line;html=1;strokeColor=#60A5FA;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="510" y="230" width="1" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="life3" value="" style="shape=line;html=1;strokeColor=#A78BFA;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="840" y="230" width="1" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="life4" value="" style="shape=line;html=1;strokeColor=#4ADE80;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1170" y="230" width="1" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="life5" value="" style="shape=line;html=1;strokeColor=#FBBF24;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1485" y="230" width="1" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="life6" value="" style="shape=line;html=1;strokeColor=#F472B6;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1725" y="230" width="1" height="720" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sReq1" value="1. HTTP request" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="190" y="310" as="sourcePoint" /><mxPoint x="510" y="310" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sReq2" value="2. PageModel calls service" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="510" y="380" as="sourcePoint" /><mxPoint x="840" y="380" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sReq3" value="3. Service calls repository" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="840" y="450" as="sourcePoint" /><mxPoint x="1170" y="450" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sReq4" value="4. EF Core query / save" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#1D4ED8;fontColor=#1D4ED8;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1170" y="520" as="sourcePoint" /><mxPoint x="1485" y="520" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sReq5" value="Optional external AI call" style="endArrow=block;html=1;rounded=0;strokeWidth=3;strokeColor=#2563EB;fontColor=#1D4ED8;fontSize=14;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="840" y="570" as="sourcePoint" /><mxPoint x="1725" y="570" as="targetPoint" /></mxGeometry>
+        </mxCell>
+
+        <mxCell id="sRes5" value="Optional AI result" style="endArrow=block;html=1;rounded=0;strokeWidth=3;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=14;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1725" y="670" as="sourcePoint" /><mxPoint x="840" y="670" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sRes4" value="5. Data rows / commit result" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1485" y="730" as="sourcePoint" /><mxPoint x="1170" y="730" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sRes3" value="6. Entity / query result" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="1170" y="800" as="sourcePoint" /><mxPoint x="840" y="800" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sRes2" value="7. DTO / service result" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="840" y="870" as="sourcePoint" /><mxPoint x="510" y="870" as="targetPoint" /></mxGeometry>
+        </mxCell>
+        <mxCell id="sRes1" value="8. HTML / JSON response" style="endArrow=block;html=1;rounded=0;strokeWidth=4;strokeColor=#16A34A;dashed=1;dashPattern=10 7;fontColor=#15803D;fontSize=15;fontStyle=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="510" y="930" as="sourcePoint" /><mxPoint x="190" y="930" as="targetPoint" /></mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

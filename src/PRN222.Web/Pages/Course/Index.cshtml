@@ -1,0 +1,94 @@
+@page "/Course"
+@model PRN222.Web.Pages.Course.IndexModel
+@{
+    ViewData["Title"] = "Mon hoc";
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var roleLabel = User.IsInRole(ApplicationRoles.Admin)
+        ? "Admin"
+        : User.IsInRole(ApplicationRoles.HeadLecturer)
+            ? "Truong bo mon"
+            : "Giang vien";
+    var courses = Model.Courses.ToList();
+    var totalDocuments = courses.Sum(course => course.DocumentCount);
+    var coursesWithDocuments = courses.Count(course => course.DocumentCount > 0);
+}
+
+<section class="ops-hero course-hero fade-in-up">
+    <div>
+        <span class="section-kicker">Course workspace</span>
+        <h1>Quan ly mon hoc</h1>
+        <p>
+            To chuc tai lieu theo tung mon de sinh embedding, test set, dataset fine-tune
+            va gioi han pham vi tra loi cua Chat RAG.
+        </p>
+    </div>
+    <div class="hero-action-stack">
+        @if (isAdmin)
+        {
+            <a asp-page="/Course/Create" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Them mon hoc
+            </a>
+        }
+        @if (canUploadDocuments)
+        {
+            <a asp-page="/Document/Upload" class="btn btn-outline-primary">
+                <i class="bi bi-cloud-upload"></i> Nap tai lieu
+            </a>
+        }
+    </div>
+</section>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="inline-alert inline-alert-success fade-in-up" role="status">
+        <i class="bi bi-check-circle"></i>
+        <span>@TempData["SuccessMessage"]</span>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="inline-alert inline-alert-danger fade-in-up" role="alert">
+        <i class="bi bi-exclamation-triangle"></i>
+        <span>@TempData["ErrorMessage"]</span>
+    </div>
+}
+
+<section class="course-summary-grid fade-in-up stagger-1">
+    <article class="course-summary-card">
+        <span>Tong mon hoc</span>
+        <strong>@courses.Count</strong>
+        <small>Pham vi tri thuc dang quan ly</small>
+    </article>
+    <article class="course-summary-card">
+        <span>Co tai lieu</span>
+        <strong>@coursesWithDocuments</strong>
+        <small>San sang de upload/chunk/index</small>
+    </article>
+    <article class="course-summary-card">
+        <span>Tai lieu</span>
+        <strong>@totalDocuments</strong>
+        <small>Tong file da gan vao mon hoc</small>
+    </article>
+    <article class="course-summary-card accent">
+        <span>Role</span>
+        <strong>@roleLabel</strong>
+        <small>@(isAdmin ? "Duoc tao, sua va xoa mon hoc" : canUploadDocuments ? "Duoc nap tai lieu vao mon duoc phan cong" : "Chi xem danh sach mon hoc")</small>
+    </article>
+</section>
+
+<section class="workspace-panel fade-in-up stagger-2">
+    <div class="workspace-panel-header">
+        <div>
+            <span class="section-kicker">Danh sach mon</span>
+            <h2>Cac mon dang dung cho RAG</h2>
+            <p>Moi mon la mot pham vi retrieval rieng cho chat, benchmark va fine-tuning.</p>
+        </div>
+    </div>
+
+    <div id="assigned-course-list"
+         data-refresh-url="@Url.Page("/Course/Index", "AssignedCoursesPartial")">
+        <partial name="/Pages/Course/_CourseGrid.cshtml" model="courses" />
+    </div>
+</section>

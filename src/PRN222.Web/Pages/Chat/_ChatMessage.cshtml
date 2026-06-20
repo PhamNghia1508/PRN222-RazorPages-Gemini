@@ -1,0 +1,37 @@
+@model PRN222.BLL.DTOs.ChatMessageDto
+
+@{
+    var isAssistant = string.Equals(Model.Role, "Assistant", StringComparison.OrdinalIgnoreCase);
+}
+
+<div class="poetic-message @(isAssistant ? "assistant" : "user")" @(isAssistant ? Html.Raw($"data-citations=\"{System.Net.WebUtility.HtmlEncode(System.Text.Json.JsonSerializer.Serialize(Model.Citations))}\"") : "")>
+    @if (isAssistant)
+    {
+        <div class="poetic-avatar">✦</div>
+        <div style="flex: 1;">
+            <div class="poetic-bubble">
+                <div class="markdown-content d-none">@Model.Content</div>
+                <div class="parsed-content"></div>
+            </div>
+            <div class="poetic-message-actions">
+                <button type="button" class="poetic-msg-bookmark-btn" title="Lưu vào Sổ tay">
+                    <i class="ph-light ph-bookmark-simple"></i> <span>Lưu sổ tay</span>
+                </button>
+                <button type="button" class="poetic-msg-feedback-btn feedback-up @(Model.IsHelpful == true ? "active" : "")" data-message-id="@Model.Id" data-helpful="true" title="Hữu ích">
+                    <i class="@(Model.IsHelpful == true ? "ph-fill" : "ph-light") ph-thumbs-up"></i>
+                </button>
+                <button type="button" class="poetic-msg-feedback-btn feedback-down @(Model.IsHelpful == false ? "active" : "")" data-message-id="@Model.Id" data-helpful="false" title="Không hữu ích">
+                    <i class="@(Model.IsHelpful == false ? "ph-fill" : "ph-light") ph-thumbs-down"></i>
+                </button>
+            </div>
+            <partial name="_CitationList" model="Model.Citations" />
+        </div>
+    }
+    else
+    {
+        <div class="poetic-bubble">
+            <div class="chat-user-text">@Model.Content</div>
+        </div>
+        <div class="poetic-avatar"><i class="ph-light ph-user"></i></div>
+    }
+</div>

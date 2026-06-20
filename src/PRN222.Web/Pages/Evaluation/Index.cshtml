@@ -1,0 +1,599 @@
+@page "/Evaluation"
+@model PRN222.Web.Pages.Evaluation.IndexModel
+@{
+    ViewData["Title"] = "Evaluation";
+    var latestSummary = Model.LatestSummary;
+    var courses = Model.Courses.ToList();
+    var hasCourses = courses.Any();
+    var embeddingModels = Model.EmbeddingModels;
+    var search = Model.Search;
+    var selectedStatus = Model.SelectedStatus;
+    var selectedExperimentType = Model.SelectedExperimentType;
+    var selectedEmbeddingModelId = Model.SelectedEmbeddingModelId;
+    var routeValues = Model.RouteValues;
+    var hasActiveFilters = Model.HasActiveFilters;
+    var latestRun = latestSummary?.Run;
+}
+
+@Html.AntiForgeryToken()
+
+<section class="evaluation-hero">
+    <div class="evaluation-hero-copy">
+        <span class="section-eyebrow">Evaluation</span>
+        <h1>Benchmark Center</h1>
+        <p>Run, inspect, and compare RAG retrieval against the fine-tuned baseline using the same question set and scoring metrics.</p>
+    </div>
+    <div class="evaluation-hero-actions">
+        <a asp-page="/TestSetGenerator/Index" class="btn btn-outline-secondary">
+            <i class="bi bi-ui-checks"></i>
+            <span>Test set</span>
+        </a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newRunModal" disabled="@(!hasCourses)">
+            <i class="bi bi-play-circle"></i>
+            <span>Run benchmark</span>
+        </button>
+    </div>
+</section>
+
+<section class="evaluation-summary-grid">
+    <article class="evaluation-summary-card">
+        <span>Latest run</span>
+        <strong>@(latestRun?.Name ?? "No completed run")</strong>
+        <small>@(latestRun != null ? $"{latestRun.ExperimentType} · {latestRun.StartedAt:dd/MM HH:mm}" : "Run a benchmark to populate metrics")</small>
+    </article>
+    <article class="evaluation-summary-card">
+        <span>Faithfulness</span>
+        <strong id="metricFaithfulness">@(latestSummary != null ? latestSummary.AvgFaithfulness.ToString("F3") : "--")</strong>
+        <small>Answer is grounded in the expected answer.</small>
+    </article>
+    <article class="evaluation-summary-card">
+        <span>Answer relevancy</span>
+        <strong id="metricRelevancy">@(latestSummary != null ? latestSummary.AvgAnswerRelevancy.ToString("F3") : "--")</strong>
+        <small>Embedding similarity between question and answer.</small>
+    </article>
+    <article class="evaluation-summary-card">
+        <span>Context quality</span>
+        <strong>
+            <span id="metricPrecision">@(latestSummary != null ? latestSummary.AvgContextPrecision.ToString("F2") : "--")</span>
+            <span class="metric-divider">/</span>
+            <span id="metricRecall">@(latestSummary != null ? latestSummary.AvgContextRecall.ToString("F2") : "--")</span>
+        </strong>
+        <small>Precision / recall for retrieved chunks. FineTuned runs stay at 0.</small>
+    </article>
+</section>
+
+<section class="evaluation-filter-panel">
+    <form method="get" class="evaluation-filter-grid">
+        <div class="evaluation-filter-search">
+            <label class="form-label">Search runs</label>
+            <input name="search" value="@search" class="form-control" placeholder="Run name..." aria-label="Search benchmark runs" />
+        </div>
+        <div>
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select">
+                <option value="">All statuses</option>
+                <option value="Completed" selected="@(selectedStatus == "Completed")">Completed</option>
+                <option value="CompletedWithErrors" selected="@(selectedStatus == "CompletedWithErrors")">Completed with errors</option>
+                <option value="Running" selected="@(selectedStatus == "Running")">Running</option>
+                <option value="Failed" selected="@(selectedStatus == "Failed")">Failed</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Type</label>
+            <select name="experimentType" class="form-select">
+                <option value="">All types</option>
+                <option value="RAG" selected="@(selectedExperimentType == "RAG")">RAG</option>
+                <option value="FineTuned" selected="@(selectedExperimentType == "FineTuned")">Fine-tuned</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Embedding</label>
+            <select name="embeddingModelId" class="form-select">
+                <option value="">All models</option>
+                @if (embeddingModels != null)
+                {
+                    foreach (var embeddingModel in embeddingModels)
+                    {
+                        <option value="@embeddingModel.Id" selected="@(selectedEmbeddingModelId == embeddingModel.Id)">
+                            @embeddingModel.Name
+                        </option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="evaluation-filter-actions">
+            <button type="submit" class="btn btn-outline-secondary">
+                <i class="bi bi-funnel"></i>
+                <span>Apply</span>
+            </button>
+            @if (hasActiveFilters)
+            {
+                <a asp-page="/Evaluation/Index" class="btn btn-outline-secondary" title="Clear filters">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+            }
+        </div>
+    </form>
+</section>
+
+<section class="evaluation-runs-panel">
+    <div class="evaluation-panel-header">
+        <div>
+            <span class="section-eyebrow">Runs</span>
+            <h2>Benchmark history</h2>
+            <p>@Model.Runs.TotalItems runs found. Select at least two completed runs to compare.</p>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" onclick="compareSelected()">
+            <i class="bi bi-bar-chart-line"></i>
+            <span>Compare selected</span>
+        </button>
+    </div>
+
+    <div id="compareNotice" class="evaluation-inline-notice" style="display: none;"></div>
+
+    @if (!Model.Runs.Items.Any())
+    {
+        <div class="empty-state compact">
+            <i class="bi bi-graph-up"></i>
+            <h3>@(hasActiveFilters ? "No benchmark runs match these filters" : "No evaluation runs yet")</h3>
+            <p>@(hasActiveFilters ? "Adjust or clear the filters to see benchmark history." : "Run your first benchmark to compare RAG and FineTuned quality.")</p>
+            @if (hasActiveFilters)
+            {
+                <a asp-page="/Evaluation/Index" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle"></i>
+                    <span>Clear filters</span>
+                </a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="evaluation-run-list">
+            <div class="evaluation-run-list-head">
+                <label class="evaluation-checkbox">
+                    <input type="checkbox" id="selectAll" />
+                    <span>Select all</span>
+                </label>
+                <span>Configuration</span>
+                <span>Progress</span>
+                <span>Actions</span>
+            </div>
+
+            @foreach (var run in Model.Runs.Items)
+            {
+                <article class="evaluation-run-row" onclick="window.location='/Evaluation/RunDetail/@run.Id'">
+                    <div class="evaluation-run-main">
+                        <label class="evaluation-checkbox" onclick="event.stopPropagation();">
+                            <input type="checkbox" class="run-check" value="@run.Id" />
+                        </label>
+                        <div>
+                            <div class="evaluation-run-title">
+                                <strong>@run.Name</strong>
+                                <span class="evaluation-type-badge @GetExperimentTypeClass(run.ExperimentType)">@GetExperimentLabel(run.ExperimentType)</span>
+                                <span class="evaluation-status @GetStatusClass(run.Status)">@run.Status</span>
+                            </div>
+                            <p>@run.StartedAt.ToString("dd/MM/yyyy HH:mm") · @run.TotalQuestions questions</p>
+                        </div>
+                    </div>
+
+                    <div class="evaluation-run-config">
+                        <span><i class="bi bi-diagram-3"></i> @run.ChunkingStrategy</span>
+                        <span><i class="bi bi-cpu"></i> @run.EmbeddingModelName</span>
+                        <span><i class="bi bi-scissors"></i> @run.ChunkSize / @run.ChunkOverlap</span>
+                    </div>
+
+                    <div class="evaluation-run-progress">
+                        <div class="evaluation-progress-track" aria-hidden="true">
+                            <span style="width: @GetStatusProgress(run.Status)%"></span>
+                        </div>
+                        <small>@GetStatusHelp(run.Status, run.ExperimentType)</small>
+                    </div>
+
+                    <div class="evaluation-run-actions" onclick="event.stopPropagation();">
+                        <a href="/Evaluation/RunDetail/@run.Id" class="btn btn-outline-primary btn-sm" title="View details">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <a href="/Evaluation/RunDetail/@run.Id?handler=ExportCsv" class="btn btn-outline-secondary btn-sm" title="Export CSV">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <partial name="_Pager" model="@(new { Paged = Model.Runs, RouteValues = routeValues, Label = "runs" })" />
+    }
+</section>
+
+<div class="modal fade" id="newRunModal" tabindex="-1" aria-labelledby="newRunModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content evaluation-modal">
+            <div class="modal-header">
+                <div>
+                    <span class="section-eyebrow">Benchmark setup</span>
+                    <h5 class="modal-title" id="newRunModalLabel">Run a new evaluation</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="evaluation-modal-grid">
+                    <div class="evaluation-modal-form">
+                        <div class="mb-3">
+                            <label class="form-label">Run name</label>
+                            <input type="text" id="runName" class="form-control" placeholder="e.g. RAG FixedSize 512 - PRN222" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Experiment type</label>
+                            <select id="experimentType" class="form-select" onchange="toggleExperimentFields()">
+                                <option value="RAG">RAG Retrieval Pipeline</option>
+                                <option value="FineTuned">Fine-tuned Model Baseline</option>
+                            </select>
+                        </div>
+
+                        <div id="ragConfigFields">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Chunking strategy</label>
+                                    <select id="chunkingStrategy" class="form-select">
+                                        <option value="FixedSize">Fixed Size</option>
+                                        <option value="Sentence">Sentence</option>
+                                        <option value="Semantic">Semantic</option>
+                                        <option value="None">None</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Embedding model</label>
+                                    <select id="embeddingModelId" class="form-select">
+                                        @if (embeddingModels != null)
+                                        {
+                                            foreach (var embeddingModel in embeddingModels)
+                                            {
+                                                <option value="@embeddingModel.Id">@embeddingModel.Name (@embeddingModel.Provider)</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Chunk size</label>
+                                    <input type="number" id="chunkSize" class="form-control" value="512" min="100" max="2000" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Chunk overlap</label>
+                                    <input type="number" id="chunkOverlap" class="form-control" value="50" min="0" max="500" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="fineTunedConfigFields" class="evaluation-method-note d-none">
+                            <i class="bi bi-magic"></i>
+                            <div>
+                                <strong>Fine-tuned baseline</strong>
+                                <p>Questions are sent directly to the configured fine-tuned endpoint. Retrieval, chunking, and context metrics are not used.</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Course</label>
+                            <select id="courseId" class="form-select">
+                @if (hasCourses)
+                {
+                    foreach (var course in courses)
+                    {
+                        <option value="@course.Id">@course.Name</option>
+                    }
+                }
+                else
+                {
+                    <option value="">Chưa có môn được phân công</option>
+                }
+            </select>
+            @if (!hasCourses)
+            {
+                <div class="inline-alert inline-alert-danger mt-3">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>Bạn chưa có môn được phân công để chạy benchmark.</span>
+                </div>
+            }
+                        </div>
+                    </div>
+
+                    <aside class="evaluation-method-preview" id="methodPreview">
+                        <span class="evaluation-type-badge type-rag">RAG</span>
+                        <h3>Retrieval pipeline</h3>
+                        <p>Embeds each question, retrieves matching chunks, asks the LLM with context, then scores answer and retrieval quality.</p>
+                        <ul>
+                            <li>Uses documents and chunk embeddings.</li>
+                            <li>Reports context precision and recall.</li>
+                            <li>Best for explainable source-grounded answers.</li>
+                        </ul>
+                    </aside>
+                </div>
+
+                <div id="runProgress" class="evaluation-run-progress-box d-none">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span>Running benchmark. This may take several minutes depending on API latency.</span>
+                </div>
+                <div id="runResult" class="d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btnSubmitRun" onclick="submitBenchmarkRun()">
+                    <i class="bi bi-play-fill"></i>
+                    <span>Start benchmark</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1090;">
+    <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <i class="bi bi-check-circle-fill text-success me-2" id="toastIcon"></i>
+            <strong class="me-auto" id="toastTitle">Benchmark</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body" id="toastBody"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('selectAll')?.addEventListener('change', function () {
+        document.querySelectorAll('.run-check').forEach(cb => cb.checked = this.checked);
+    });
+
+    function compareSelected() {
+        const ids = [...document.querySelectorAll('.run-check:checked')].map(cb => cb.value);
+        if (ids.length < 2) {
+            showInlineNotice('Chọn ít nhất 2 benchmark runs để so sánh.');
+            showToast('Cần chọn thêm run', 'Chọn ít nhất 2 runs để mở trang so sánh.', false);
+            return;
+        }
+        window.location.href = '/Evaluation/Compare?runIds=' + ids.join(',');
+    }
+
+    async function submitBenchmarkRun() {
+        const btn = document.getElementById('btnSubmitRun');
+        const progress = document.getElementById('runProgress');
+        const result = document.getElementById('runResult');
+        const experimentType = document.getElementById('experimentType').value;
+        const isFineTuned = experimentType === 'FineTuned';
+
+        btn.disabled = true;
+        progress.classList.remove('d-none');
+        result.classList.add('d-none');
+        result.innerHTML = '';
+
+        const payload = {
+            name: document.getElementById('runName').value || `${experimentType} Benchmark`,
+            experimentType: experimentType,
+            chunkingStrategy: isFineTuned ? 'None' : document.getElementById('chunkingStrategy').value,
+            embeddingModelId: parseInt(document.getElementById('embeddingModelId').value),
+            chunkSize: isFineTuned ? 0 : parseInt(document.getElementById('chunkSize').value),
+            chunkOverlap: isFineTuned ? 0 : parseInt(document.getElementById('chunkOverlap').value),
+            courseId: parseInt(document.getElementById('courseId').value)
+        };
+
+        try {
+            const response = await fetch('/Evaluation?handler=CreateRun', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+            progress.classList.add('d-none');
+
+            if (data.success) {
+                result.innerHTML = `<div class="alert alert-success mb-0">${escapeHtml(data.message)}</div>`;
+                result.classList.remove('d-none');
+                showToast('Hoàn thành', data.message, true);
+
+                document.getElementById('metricFaithfulness').textContent = data.avgFaithfulness.toFixed(3);
+                document.getElementById('metricRelevancy').textContent = data.avgAnswerRelevancy.toFixed(3);
+                document.getElementById('metricPrecision').textContent = data.avgContextPrecision.toFixed(2);
+                document.getElementById('metricRecall').textContent = data.avgContextRecall.toFixed(2);
+
+                setTimeout(() => location.reload(), 1600);
+            } else {
+                result.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(data.message)}</div>`;
+                result.classList.remove('d-none');
+                showToast('Lỗi benchmark', data.message, false);
+            }
+        } catch (err) {
+            progress.classList.add('d-none');
+            result.innerHTML = `<div class="alert alert-danger mb-0">Network error: ${escapeHtml(err.message)}</div>`;
+            result.classList.remove('d-none');
+            showToast('Network error', err.message, false);
+        }
+
+        btn.disabled = false;
+    }
+
+    function toggleExperimentFields() {
+        const isFineTuned = document.getElementById('experimentType').value === 'FineTuned';
+        document.getElementById('chunkingStrategy').disabled = isFineTuned;
+        document.getElementById('embeddingModelId').disabled = isFineTuned;
+        document.getElementById('chunkSize').disabled = isFineTuned;
+        document.getElementById('chunkOverlap').disabled = isFineTuned;
+        document.getElementById('ragConfigFields').classList.toggle('d-none', isFineTuned);
+        document.getElementById('fineTunedConfigFields').classList.toggle('d-none', !isFineTuned);
+
+        if (isFineTuned) {
+            document.getElementById('chunkingStrategy').value = 'None';
+            document.getElementById('chunkSize').value = 0;
+            document.getElementById('chunkOverlap').value = 0;
+            updateMethodPreview('finetuned');
+        } else {
+            document.getElementById('chunkingStrategy').value = 'FixedSize';
+            document.getElementById('chunkSize').value = 512;
+            document.getElementById('chunkOverlap').value = 50;
+            updateMethodPreview('rag');
+        }
+    }
+
+    function updateMethodPreview(mode) {
+        const preview = document.getElementById('methodPreview');
+        if (!preview) return;
+
+        if (mode === 'finetuned') {
+            preview.innerHTML = `
+                <span class="evaluation-type-badge type-finetuned">FineTuned</span>
+                <h3>Fine-tuned baseline</h3>
+                <p>Sends each question directly to the configured fine-tuned model endpoint, then evaluates answer quality with the same scoring pipeline.</p>
+                <ul>
+                    <li>No retrieval or source chunks.</li>
+                    <li>Context precision and recall stay at 0.</li>
+                    <li>Useful as the non-RAG baseline.</li>
+                </ul>`;
+            return;
+        }
+
+        preview.innerHTML = `
+            <span class="evaluation-type-badge type-rag">RAG</span>
+            <h3>Retrieval pipeline</h3>
+            <p>Embeds each question, retrieves matching chunks, asks the LLM with context, then scores answer and retrieval quality.</p>
+            <ul>
+                <li>Uses documents and chunk embeddings.</li>
+                <li>Reports context precision and recall.</li>
+                <li>Best for explainable source-grounded answers.</li>
+            </ul>`;
+    }
+
+    function showInlineNotice(message) {
+        const notice = document.getElementById('compareNotice');
+        if (!notice) return;
+        notice.textContent = message;
+        notice.style.display = 'block';
+        setTimeout(() => notice.style.display = 'none', 4500);
+    }
+
+    function showToast(title, body, isSuccess) {
+        document.getElementById('toastTitle').textContent = title;
+        document.getElementById('toastBody').textContent = body;
+        const icon = document.getElementById('toastIcon');
+        icon.className = isSuccess
+            ? 'bi bi-check-circle-fill text-success me-2'
+            : 'bi bi-exclamation-triangle-fill text-danger me-2';
+        const toast = new bootstrap.Toast(document.getElementById('liveToast'), { delay: 5000 });
+        toast.show();
+    }
+
+    // Polling active runs
+    function startRunStatusPolling() {
+        const activeRows = document.querySelectorAll('.evaluation-run-row');
+        let hasRunning = false;
+        activeRows.forEach(row => {
+            const statusText = row.querySelector('.evaluation-status')?.textContent?.trim()?.toLowerCase();
+            if (statusText === 'running' || statusText === 'pending') {
+                hasRunning = true;
+            }
+        });
+
+        if (!hasRunning) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const response = await fetch('/Evaluation?handler=RunStatuses');
+                const runningRuns = await response.json();
+
+                if (runningRuns.length === 0) {
+                    clearInterval(interval);
+                    location.reload();
+                    return;
+                }
+
+                const runningIds = runningRuns.map(r => r.id);
+                activeRows.forEach(row => {
+                    const checkbox = row.querySelector('.run-check');
+                    if (!checkbox) return;
+                    const id = parseInt(checkbox.value);
+                    const statusBadge = row.querySelector('.evaluation-status');
+                    const progressTrack = row.querySelector('.evaluation-progress-track span');
+
+                    if (runningIds.includes(id)) {
+                        const runData = runningRuns.find(r => r.id === id);
+                        if (statusBadge && statusBadge.textContent !== runData.status) {
+                            statusBadge.textContent = runData.status;
+                            statusBadge.className = 'evaluation-status status-running';
+                        }
+                        if (progressTrack) {
+                            progressTrack.style.width = '44%'; // Running status width
+                        }
+                    } else {
+                        // This run is no longer running (finished!)
+                        clearInterval(interval);
+                        location.reload();
+                    }
+                });
+            } catch (err) {
+                console.error("Failed to poll run statuses:", err);
+            }
+        }, 5000);
+    }
+
+    function escapeHtml(unsafe) {
+        if (!unsafe) return '';
+        return unsafe
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        toggleExperimentFields();
+        startRunStatusPolling();
+    });
+</script>
+}
+
+@functions {
+    private static string GetExperimentTypeClass(string type) =>
+        string.Equals(type, "FineTuned", StringComparison.OrdinalIgnoreCase)
+            ? "type-finetuned"
+            : "type-rag";
+
+    private static string GetExperimentLabel(string type) =>
+        string.Equals(type, "FineTuned", StringComparison.OrdinalIgnoreCase)
+            ? "FineTuned"
+            : "RAG";
+
+    private static string GetStatusClass(string status) => status switch
+    {
+        "Completed" => "status-good",
+        "Running" => "status-running",
+        "Failed" => "status-bad",
+        "CompletedWithErrors" => "status-warn",
+        _ => "status-muted"
+    };
+
+    private static int GetStatusProgress(string status) => status switch
+    {
+        "Completed" => 100,
+        "CompletedWithErrors" => 72,
+        "Running" => 44,
+        "Failed" => 100,
+        _ => 20
+    };
+
+    private static string GetStatusHelp(string status, string type) => status switch
+    {
+        "Completed" => string.Equals(type, "FineTuned", StringComparison.OrdinalIgnoreCase)
+            ? "Fine-tuned answers evaluated"
+            : "RAG retrieval and answers evaluated",
+        "CompletedWithErrors" => "Some questions failed but results were preserved",
+        "Running" => "Evaluation is still processing",
+        "Failed" => "All questions failed or configuration rejected the run",
+        _ => "Waiting for results"
+    };
+}
