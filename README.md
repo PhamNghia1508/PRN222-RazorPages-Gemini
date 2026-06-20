@@ -11,7 +11,6 @@ PRN222 Razor Pages Gemini is an ASP.NET Core Razor Pages web application for cou
 - Google Gemini integration for content generation, embeddings, and vision-related document support.
 - SQL Server persistence for identity, courses, departments, documents, chunks, embeddings, chat sessions, and benchmark runs.
 - Application-owned file storage under `App_Data/uploads` for uploaded documents and extracted chunk images.
-- Architecture diagrams under `docs/architecture`.
 
 ## Architecture Overview
 
@@ -34,12 +33,6 @@ Key architectural idea:
 - `PRN222.DAL` owns EF Core entities, configuration, migrations, repositories, and the database context.
 - Google Gemini is an external provider and is accessed through adapter services, not directly from Razor Pages.
 
-The current high-level diagram is available at:
-
-```text
-docs/architecture/prn222-three-layer-highlevel-v3.drawio
-```
-
 ## Solution Structure
 
 ```text
@@ -50,8 +43,6 @@ PRN222_Assignment1/
 |   |-- PRN222.DAL/       # EF Core data access and migrations
 |   |-- PRN222.Tests/     # xUnit test project
 |   `-- PRN222_Assignment1.sln
-|-- docs/
-|   `-- architecture/     # draw.io architecture diagrams
 |-- Walkthrough.md
 |-- Report_RAG_vs_Finetuning.md
 `-- README.md
@@ -111,6 +102,5 @@ Use them only for local development or classroom demos. Change them before any r
 
 ## Notes For Reviewers
 
-- Gemini is the only external AI provider represented in the current architecture diagram.
+- Gemini is the main external AI provider used by the Razor Pages application.
 - Uploaded files and generated local logs are intentionally ignored by Git.
-- The diagram uses a clean white canvas and orthogonal connectors for presentation/report export.
