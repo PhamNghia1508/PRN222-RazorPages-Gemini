@@ -940,6 +940,27 @@
             return;
         }
 
+        if (currentController === 'course') {
+            const wrapper = document.getElementById('assigned-course-list');
+            const refreshUrl = wrapper?.dataset?.refreshUrl;
+            if (wrapper && refreshUrl) {
+                refreshPartialContainer(
+                    wrapper,
+                    refreshUrl,
+                    { get current() { return courseRefreshController; }, set current(value) { courseRefreshController = value; } },
+                    'document-changed'
+                ).then(refreshed => {
+                    const action = normalizeDocumentAction(getDocumentNotificationValue(data, 'action'));
+                    const fileName = getDocumentNotificationValue(data, 'fileName') ?? 'T\u00e0i li\u1ec7u';
+                    const toastMsg = action === 'deleted'
+                        ? `T\u00e0i li\u1ec7u <strong>${escapeHtml(fileName)}</strong> \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00f3a kh\u1ecfi m\u00f4n h\u1ecdc.`
+                        : `T\u00e0i li\u1ec7u <strong>${escapeHtml(fileName)}</strong> \u0111\u00e3 \u0111\u01b0\u1ee3c c\u1eadp nh\u1eadt.`;
+                    showToast(toastMsg, refreshed ? 'success' : 'info');
+                });
+            }
+            return;
+        }
+
         if (
             currentController === 'chat'
             || currentController === 'evaluation'
