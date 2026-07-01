@@ -10,6 +10,9 @@ public interface IDocumentService
     /// <summary>Get all documents.</summary>
     Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync();
 
+    /// <summary>Get aggregate document metrics and the five most recent documents for the dashboard.</summary>
+    Task<DocumentDashboardSummaryDto> GetDashboardSummaryAsync(IEnumerable<int>? courseIds = null);
+
     /// <summary>Get a document with full details and chunks.</summary>
     Task<DocumentDetailDto?> GetDocumentByIdAsync(int id);
 

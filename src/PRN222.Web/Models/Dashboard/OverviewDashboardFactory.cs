@@ -5,6 +5,35 @@ namespace PRN222.Web.Models.Dashboard;
 public static class OverviewDashboardFactory
 {
     public static OverviewDashboardViewModel Build(
+        DocumentDashboardSummaryDto documents,
+        CourseDashboardSummaryDto courses,
+        bool canOperateModels = true)
+    {
+        return new OverviewDashboardViewModel
+        {
+            TotalDocuments = documents.TotalDocuments,
+            IndexedDocuments = documents.IndexedDocuments,
+            FailedDocuments = documents.FailedDocuments,
+            IndexedChunks = documents.IndexedChunks,
+            TotalCourses = courses.TotalCourses,
+            EvaluationStatus = documents.IndexedDocuments > 0 ? "Sáºµn sÃ ng" : "Thiáº¿u dá»¯ liá»‡u",
+            PipelineSteps = BuildPipelineSteps(
+                documents.TotalDocuments,
+                documents.UploadedDocuments,
+                documents.ProcessingDocuments,
+                documents.IndexedDocuments,
+                canOperateModels),
+            RecentDocuments = documents.RecentDocuments,
+            NextActions = BuildNextActions(
+                documents.TotalDocuments,
+                documents.UploadedDocuments,
+                documents.FailedDocuments,
+                documents.IndexedDocuments,
+                canOperateModels)
+        };
+    }
+
+    public static OverviewDashboardViewModel Build(
         IEnumerable<DocumentDto> documents,
         IEnumerable<CourseDto> courses,
         bool canOperateModels = true)

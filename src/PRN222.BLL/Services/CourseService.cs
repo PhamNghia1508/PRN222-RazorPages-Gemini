@@ -35,6 +35,23 @@ public class CourseService : ICourseService
         return courses.Select(ToDto);
     }
 
+    public async Task<CourseDashboardSummaryDto> GetDashboardSummaryAsync(IEnumerable<int>? courseIds = null)
+    {
+        var courseIdList = courseIds?.Distinct().ToList();
+        var query = _courseRepository.GetQueryable().AsNoTracking();
+        if (courseIdList is not null)
+        {
+            query = query.Where(course => courseIdList.Contains(course.Id));
+        }
+
+        var visibleCourseIds = await query
+            .OrderBy(course => course.Id)
+            .Select(course => course.Id)
+            .ToListAsync();
+
+        return new CourseDashboardSummaryDto(visibleCourseIds.Count, visibleCourseIds);
+    }
+
     public async Task<CourseDto?> GetCourseByIdAsync(int id)
     {
         var course = await _courseRepository.GetQueryable()

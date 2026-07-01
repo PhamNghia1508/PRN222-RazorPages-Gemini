@@ -267,54 +267,73 @@ public class ChatService : IChatService
 
     public async Task<StudentAnalyticsDto> GetStudentAnalyticsAsync(IEnumerable<int> visibleCourseIds)
     {
-        var courseIdSet = visibleCourseIds.ToHashSet();
-        var messagesForAnalytics = await _messageRepository.GetQueryable()
-            .Include(m => m.Citations)
-                .ThenInclude(c => c.Chunk)
-                    .ThenInclude(chk => chk.Document)
+        var courseIdList = visibleCourseIds.Distinct().ToList();
+        if (courseIdList.Count == 0)
+        {
+            return new StudentAnalyticsDto(0, 0.0, 0.0, new List<FailedQueryDto>(), new List<TopDocumentDto>());
+        }
+
+        var visibleAssistantMessages = _messageRepository.GetQueryable()
+            .AsNoTracking()
             .Where(m => m.Role == MessageRole.Assistant)
             .Where(m =>
-                (m.CourseId.HasValue && courseIdSet.Contains(m.CourseId.Value)) ||
+                (m.CourseId.HasValue && courseIdList.Contains(m.CourseId.Value)) ||
                 (!m.CourseId.HasValue &&
-                 m.Citations.Any(c => courseIdSet.Contains(c.Chunk.Document.CourseId))))
-            .ToListAsync();
+                 m.Citations.Any(c => courseIdList.Contains(c.Chunk.Document.CourseId))));
 
-        // Calculate KPIs
-        int totalQueries = messagesForAnalytics.Count;
-
-        var votedMessages = messagesForAnalytics.Where(m => m.IsHelpful.HasValue).ToList();
-        double helpfulnessRate = votedMessages.Any()
-            ? (double)votedMessages.Count(m => m.IsHelpful == true) / votedMessages.Count
+        var totalQueries = await visibleAssistantMessages.CountAsync();
+        var votedCount = await visibleAssistantMessages.CountAsync(m => m.IsHelpful.HasValue);
+        var helpfulnessRate = votedCount > 0
+            ? (double)await visibleAssistantMessages.CountAsync(m => m.IsHelpful == true) / votedCount
             : 0.0;
+        var avgConfidenceScore = await visibleAssistantMessages
+            .Where(m => m.ConfidenceScore.HasValue)
+            .AverageAsync(m => (double?)m.ConfidenceScore) ?? 0.0;
 
-        var confidenceMessages = messagesForAnalytics.Where(m => m.ConfidenceScore.HasValue).ToList();
-        double avgConfidenceScore = confidenceMessages.Any()
-            ? (double)confidenceMessages.Average(m => m.ConfidenceScore!.Value)
-            : 0.0;
-
-        // 2. Identify Failed / Low Confidence / Downvoted Queries
-        var failedQueryEntities = messagesForAnalytics
+        var failedQueryEntities = await visibleAssistantMessages
             .Where(m => m.IsHelpful == false || (m.ConfidenceScore.HasValue && m.ConfidenceScore.Value < 0.5f))
             .OrderByDescending(m => m.CreatedAt)
             .Take(15)
-            .ToList();
+            .Select(m => new
+            {
+                m.Id,
+                m.SessionId,
+                m.Content,
+                m.ConfidenceScore,
+                m.IsHelpful,
+                m.CreatedAt,
+                CourseId = m.CourseId ?? m.Citations
+                    .Select(c => (int?)c.Chunk.Document.CourseId)
+                    .FirstOrDefault()
+            })
+            .ToListAsync();
 
         var failedQueries = new List<FailedQueryDto>();
         var failedSessionIds = failedQueryEntities
             .Select(message => message.SessionId)
             .ToHashSet();
-        var userMessagesBySession = (await _messageRepository.GetQueryable()
+        var userMessagesBySession = failedSessionIds.Count == 0
+            ? new Dictionary<int, List<ChatMessage>>()
+            : (await _messageRepository.GetQueryable()
+                .AsNoTracking()
                 .Where(message =>
                     failedSessionIds.Contains(message.SessionId) &&
                     message.Role == MessageRole.User)
+                .Select(message => new ChatMessage
+                {
+                    Id = message.Id,
+                    SessionId = message.SessionId,
+                    Content = message.Content
+                })
                 .ToListAsync())
-            .GroupBy(message => message.SessionId)
-            .ToDictionary(
-                group => group.Key,
-                group => group.OrderBy(message => message.Id).ToList());
+                .GroupBy(message => message.SessionId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.OrderBy(message => message.Id).ToList());
 
-        var allCourses = await _courseRepository.GetAllAsync();
-        var courseMap = allCourses.ToDictionary(c => c.Id, c => c.Name);
+        var courseMap = (await _courseRepository.GetAllAsync())
+            .Where(course => courseIdList.Contains(course.Id))
+            .ToDictionary(course => course.Id, course => course.Name);
 
         foreach (var m in failedQueryEntities)
         {
@@ -325,17 +344,6 @@ public class ChatService : IChatService
             string questionText = questionMsg?.Content ?? "Không rõ câu hỏi";
 
             int? courseId = m.CourseId;
-            courseId ??= m.Citations
-                .Select(c => c.Chunk?.Document?.CourseId)
-                .FirstOrDefault(id => id.HasValue);
-            if (!courseId.HasValue)
-            {
-                courseId = messagesForAnalytics
-                    .Where(other => other.SessionId == m.SessionId)
-                    .SelectMany(other => other.Citations)
-                    .Select(c => c.Chunk?.Document?.CourseId)
-                    .FirstOrDefault(id => id.HasValue);
-            }
             string courseName = (courseId.HasValue && courseMap.TryGetValue(courseId.Value, out var name))
                 ? name
                 : "Chưa phân loại";
@@ -353,22 +361,30 @@ public class ChatService : IChatService
         }
 
         // 3. Top Cited Documents
-        var documentCitations = messagesForAnalytics
+        var documentCitations = await visibleAssistantMessages
             .SelectMany(m => m.Citations)
-            .Where(c => c.Chunk?.Document != null && courseIdSet.Contains(c.Chunk.Document.CourseId))
-            .GroupBy(c => c.Chunk.DocumentId)
+            .Where(c => courseIdList.Contains(c.Chunk.Document.CourseId))
+            .GroupBy(c => new
+            {
+                c.Chunk.DocumentId,
+                c.Chunk.Document.OriginalFileName,
+                c.Chunk.Document.FileName,
+                c.Chunk.Document.CourseId
+            })
             .Select(g => new {
-                DocumentId = g.Key,
+                g.Key.DocumentId,
+                DocumentName = g.Key.OriginalFileName ?? g.Key.FileName,
+                g.Key.CourseId,
+                Doc = new { CourseId = g.Key.CourseId },
                 Count = g.Count(),
-                Doc = g.First().Chunk.Document
             })
             .OrderByDescending(g => g.Count)
             .Take(10)
-            .ToList();
+            .ToListAsync();
 
         var topCitedDocuments = documentCitations.Select(dc => new TopDocumentDto(
             dc.DocumentId,
-            dc.Doc.OriginalFileName ?? dc.Doc.FileName,
+            dc.DocumentName,
             courseMap.TryGetValue(dc.Doc.CourseId, out var cName) ? cName : "Chưa phân loại",
             dc.Count
         )).ToList();

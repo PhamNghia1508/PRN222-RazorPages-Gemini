@@ -76,6 +76,55 @@ public class DocumentService : IDocumentService
         return documents.Select(MapToDto);
     }
 
+    public async Task<DocumentDashboardSummaryDto> GetDashboardSummaryAsync(IEnumerable<int>? courseIds = null)
+    {
+        var courseIdList = courseIds?.Distinct().ToList();
+        var query = _documentRepository.GetQueryable().AsNoTracking();
+        if (courseIdList is not null)
+        {
+            query = query.Where(document => courseIdList.Contains(document.CourseId));
+        }
+
+        var aggregate = await query
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                TotalDocuments = group.Count(),
+                IndexedDocuments = group.Count(document => document.Status == DocumentStatus.Indexed),
+                FailedDocuments = group.Count(document => document.Status == DocumentStatus.Failed),
+                ProcessingDocuments = group.Count(document => document.Status == DocumentStatus.Processing),
+                UploadedDocuments = group.Count(document => document.Status == DocumentStatus.Uploaded),
+                IndexedChunks = group.Sum(document =>
+                    document.Status == DocumentStatus.Indexed ? document.ChunkCount : 0)
+            })
+            .FirstOrDefaultAsync();
+
+        var recentDocuments = await query
+            .OrderByDescending(document => document.CreatedAt)
+            .Take(5)
+            .Select(document => new DocumentDto(
+                document.Id,
+                document.FileName,
+                document.OriginalFileName,
+                document.ContentType,
+                document.FileSize,
+                document.ChunkCount,
+                document.Status.ToString(),
+                document.Course.Name,
+                document.CourseId,
+                document.CreatedAt))
+            .ToListAsync();
+
+        return new DocumentDashboardSummaryDto(
+            aggregate?.TotalDocuments ?? 0,
+            aggregate?.IndexedDocuments ?? 0,
+            aggregate?.FailedDocuments ?? 0,
+            aggregate?.ProcessingDocuments ?? 0,
+            aggregate?.UploadedDocuments ?? 0,
+            aggregate?.IndexedChunks ?? 0,
+            recentDocuments);
+    }
+
     private static int GetIntSetting(IConfiguration? configuration, string key, int defaultValue)
     {
         if (configuration == null)

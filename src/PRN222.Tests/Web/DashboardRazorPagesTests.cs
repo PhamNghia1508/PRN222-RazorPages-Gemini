@@ -43,8 +43,10 @@ public class DashboardRazorPagesTests
         var departmentService = new Mock<IDepartmentService>();
         var userManager = CreateUserManagerMock();
 
-        documentService.Setup(s => s.GetAllDocumentsAsync()).ReturnsAsync(documents);
-        courseService.Setup(s => s.GetAllCoursesAsync()).ReturnsAsync(courses);
+        documentService.Setup(s => s.GetDashboardSummaryAsync(null))
+            .ReturnsAsync(new DocumentDashboardSummaryDto(1, 1, 0, 0, 0, 8, documents));
+        courseService.Setup(s => s.GetDashboardSummaryAsync(null))
+            .ReturnsAsync(new CourseDashboardSummaryDto(1, [1]));
         chatService.Setup(s => s.GetStudentAnalyticsAsync(It.IsAny<IEnumerable<int>>()))
             .ReturnsAsync(new StudentAnalyticsDto(0, 0.0, 0.0, new List<FailedQueryDto>(), new List<TopDocumentDto>()));
 

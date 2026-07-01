@@ -35,8 +35,10 @@ public class HomePageTests
         var userManager = new Mock<UserManager<ApplicationUser>>(
             new Mock<IUserStore<ApplicationUser>>().Object,
             null!, null!, null!, null!, null!, null!, null!, null!);
-        documentService.Setup(s => s.GetAllDocumentsAsync()).ReturnsAsync(documents);
-        courseService.Setup(s => s.GetAllCoursesAsync()).ReturnsAsync(courses);
+        documentService.Setup(s => s.GetDashboardSummaryAsync(null))
+            .ReturnsAsync(new DocumentDashboardSummaryDto(1, 1, 0, 0, 0, 8, documents));
+        courseService.Setup(s => s.GetDashboardSummaryAsync(null))
+            .ReturnsAsync(new CourseDashboardSummaryDto(1, [1]));
         chatService.Setup(s => s.GetStudentAnalyticsAsync(It.IsAny<IEnumerable<int>>()))
             .ReturnsAsync(new StudentAnalyticsDto(0, 0.0, 0.0, new List<FailedQueryDto>(), new List<TopDocumentDto>()));
 

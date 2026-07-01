@@ -8,6 +8,7 @@ namespace PRN222.BLL.Services.Interfaces;
 public interface ICourseService
 {
     Task<IEnumerable<CourseDto>> GetAllCoursesAsync();
+    Task<CourseDashboardSummaryDto> GetDashboardSummaryAsync(IEnumerable<int>? courseIds = null);
     Task<CourseDto?> GetCourseByIdAsync(int id);
     Task<CourseDto> CreateCourseAsync(string name, string? description, int departmentId);
     Task<CourseDto> UpdateCourseAsync(int id, string name, string? description, int departmentId);

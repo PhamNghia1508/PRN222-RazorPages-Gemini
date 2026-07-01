@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -30,12 +31,10 @@ public class IndexModel(
 
     public async Task OnGetAsync()
     {
-        _ = logger;
         _ = departmentService;
+        var totalStopwatch = Stopwatch.StartNew();
 
-        var courses = (await courseService.GetAllCoursesAsync()).ToList();
-        var documents = (await documentService.GetAllDocumentsAsync()).ToList();
-
+        var blockStopwatch = Stopwatch.StartNew();
         var currentUserId = User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!string.IsNullOrWhiteSpace(currentUserId))
         {
@@ -44,32 +43,68 @@ public class IndexModel(
                 .FirstOrDefaultAsync(u => u.Id == currentUserId);
             ViewData["UserDepartmentId"] = currentUser?.DepartmentId;
             ViewData["UserDepartmentName"] = currentUser?.Department?.Name;
+            logger.LogInformation(
+                "PERF_TEMP Dashboard current user/account profile completed in {ElapsedMilliseconds} ms",
+                blockStopwatch.ElapsedMilliseconds);
         }
 
+        IReadOnlySet<int>? assignedCourseIds = null;
         if (IsCourseScopedUser())
         {
-            IReadOnlySet<int> assignedCourseIds = string.IsNullOrWhiteSpace(currentUserId)
+            blockStopwatch.Restart();
+            assignedCourseIds = string.IsNullOrWhiteSpace(currentUserId)
                 ? new HashSet<int>()
                 : await courseAccessService.GetAccessibleStaffCourseIdsAsync(currentUserId);
-
-            courses = courses.Where(course => assignedCourseIds.Contains(course.Id)).ToList();
-            documents = documents.Where(document => assignedCourseIds.Contains(document.CourseId)).ToList();
+            logger.LogInformation(
+                "PERF_TEMP Dashboard course access scope completed in {ElapsedMilliseconds} ms",
+                blockStopwatch.ElapsedMilliseconds);
         }
 
-        var visibleCourseIds = courses.Select(c => c.Id).ToList();
+        blockStopwatch.Restart();
+        var courses = await courseService.GetDashboardSummaryAsync(assignedCourseIds);
+        logger.LogInformation(
+            "PERF_TEMP Dashboard GetCourseDashboardSummaryAsync completed in {ElapsedMilliseconds} ms",
+            blockStopwatch.ElapsedMilliseconds);
+
+        blockStopwatch.Restart();
+        var documents = await documentService.GetDashboardSummaryAsync(assignedCourseIds);
+        logger.LogInformation(
+            "PERF_TEMP Dashboard GetDocumentDashboardSummaryAsync completed in {ElapsedMilliseconds} ms",
+            blockStopwatch.ElapsedMilliseconds);
+
+        var visibleCourseIds = courses.CourseIds;
+        blockStopwatch.Restart();
         StudentAnalytics = await chatService.GetStudentAnalyticsAsync(visibleCourseIds);
+        logger.LogInformation(
+            "PERF_TEMP Dashboard GetStudentAnalyticsAsync completed in {ElapsedMilliseconds} ms",
+            blockStopwatch.ElapsedMilliseconds);
 
         if (User?.Identity?.IsAuthenticated == true && (User.IsInRole(ApplicationRoles.Admin) || User.IsInRole(ApplicationRoles.HeadLecturer)))
         {
+            blockStopwatch.Restart();
             PendingProposals = await curationService.GetPendingLogsAsync(visibleCourseIds);
             AuditHistory = await curationService.GetAuditHistoryAsync(visibleCourseIds);
+            logger.LogInformation(
+                "PERF_TEMP Dashboard curation logs completed in {ElapsedMilliseconds} ms",
+                blockStopwatch.ElapsedMilliseconds);
         }
         else if (User?.Identity?.IsAuthenticated == true && User.IsInRole(ApplicationRoles.Lecturer))
         {
+            blockStopwatch.Restart();
             MyProposals = await curationService.GetProposalsByUserAsync(currentUserId ?? string.Empty);
+            logger.LogInformation(
+                "PERF_TEMP Dashboard curation logs completed in {ElapsedMilliseconds} ms",
+                blockStopwatch.ElapsedMilliseconds);
         }
 
+        blockStopwatch.Restart();
         Dashboard = OverviewDashboardFactory.Build(documents, courses, CanOperateModels());
+        logger.LogInformation(
+            "PERF_TEMP Dashboard OverviewDashboardFactory completed in {ElapsedMilliseconds} ms",
+            blockStopwatch.ElapsedMilliseconds);
+        logger.LogInformation(
+            "PERF_TEMP Dashboard OnGetAsync total completed in {ElapsedMilliseconds} ms",
+            totalStopwatch.ElapsedMilliseconds);
     }
 
     private bool IsCourseScopedUser() =>
