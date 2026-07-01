@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 #nullable disable
 
 namespace PRN222.DAL.Migrations
 {
+    [DbContext(typeof(PRN222.DAL.Data.ChatbotDbContext))]
+    [Migration("20260619093000_AddDepartmentHeadLecturerOwner")]
     /// <inheritdoc />
     public partial class AddDepartmentHeadLecturerOwner : Migration
     {
