@@ -683,12 +683,11 @@ public class DocumentServiceTests
     }
 
     [Fact]
-    public async Task DeleteDocumentAsync_ShouldDeleteFromDatabaseFirst_ThenDeleteFromDisk()
+    public async Task ArchiveDocumentAsync_ShouldPreserveDocumentAndStoredContent()
     {
-        // Arrange
-        int docId = 303;
+        const int docId = 303;
         var tempFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.txt");
-        await File.WriteAllTextAsync(tempFilePath, "Delete me");
+        await File.WriteAllTextAsync(tempFilePath, "Keep me");
 
         try
         {
@@ -702,34 +701,34 @@ public class DocumentServiceTests
                 Status = DocumentStatus.Indexed
             };
 
-            _documentRepoMock.Setup(r => r.GetWithChunksAsync(docId))
+            _documentRepoMock.Setup(r => r.GetByIdAsync(docId))
                 .ReturnsAsync(document);
 
-            bool dbDeletedBeforeFile = false;
+            var beforeArchive = DateTime.UtcNow;
+            await _documentService.ArchiveDocumentAsync(
+                docId,
+                "admin-user-id",
+                "  Tài liệu không còn phù hợp cho RAG.  ");
+            var afterArchive = DateTime.UtcNow;
 
-            // Setup repository delete to verify file still exists at DB deletion time
-            _documentRepoMock.Setup(r => r.Delete(document))
-                .Callback(() =>
-                {
-                    dbDeletedBeforeFile = File.Exists(tempFilePath);
-                });
-
-            // Act
-            await _documentService.DeleteDocumentAsync(docId);
-
-            // Assert
-            _documentRepoMock.Verify(r => r.Delete(document), Times.Once);
+            document.Status.Should().Be(DocumentStatus.Archived);
+            document.ArchivedFromStatus.Should().Be(DocumentStatus.Indexed);
+            document.ArchivedByUserId.Should().Be("admin-user-id");
+            document.ArchiveReason.Should().Be("Tài liệu không còn phù hợp cho RAG.");
+            document.ArchivedAt.Should().BeOnOrAfter(beforeArchive).And.BeOnOrBefore(afterArchive);
+            document.ArchivedAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
+            document.UpdatedAt.Should().NotBeNull();
             _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Once);
-
-            dbDeletedBeforeFile.Should().BeTrue("because the physical file must not be deleted before the database transaction commits!");
-            File.Exists(tempFilePath).Should().BeFalse("because the physical file should be deleted after the database commits successfully!");
+            _documentRepoMock.Verify(r => r.Delete(It.IsAny<Document>()), Times.Never);
+            _chunkRepoMock.Verify(r => r.DeleteByDocumentIdAsync(It.IsAny<int>()), Times.Never);
+            File.Exists(tempFilePath).Should().BeTrue();
             _realtimeNotifierMock.Verify(n => n.NotifyDocumentChangedAsync(
                 It.Is<DocumentRealtimeNotification>(notification =>
                     notification.DocumentId == docId &&
                     notification.CourseId == 1 &&
                     notification.FileName == "todelete.pdf" &&
-                    notification.Status == nameof(DocumentStatus.Indexed) &&
-                    notification.Action == "deleted" &&
+                    notification.Status == nameof(DocumentStatus.Archived) &&
+                    notification.Action == "archived" &&
                     notification.ChunkCount == 0),
                 It.IsAny<CancellationToken>()), Times.Once);
         }
@@ -740,5 +739,148 @@ public class DocumentServiceTests
                 File.Delete(tempFilePath);
             }
         }
+    }
+
+    [Fact]
+    public async Task GetDocumentByIdAsync_ShouldMapArchiveAuditAndAllowLegacyNullAudit()
+    {
+        const int docId = 311;
+        var archivedAt = new DateTime(2026, 7, 2, 3, 30, 0, DateTimeKind.Utc);
+        var document = new Document
+        {
+            Id = docId,
+            CourseId = 1,
+            Course = new Course { Id = 1, Name = "PRN222" },
+            Status = DocumentStatus.Archived,
+            ArchivedByUserId = "admin-user-id",
+            ArchivedByUser = new ApplicationUser { Id = "admin-user-id", Email = "admin@demo.local" },
+            ArchivedAt = archivedAt,
+            ArchiveReason = "Không còn phù hợp",
+            ArchivedFromStatus = DocumentStatus.Indexed
+        };
+        _documentRepoMock.Setup(r => r.GetWithChunksAsync(docId)).ReturnsAsync(document);
+
+        var result = await _documentService.GetDocumentByIdAsync(docId);
+
+        result.Should().NotBeNull();
+        result!.ArchivedByEmail.Should().Be("admin@demo.local");
+        result.ArchivedAt.Should().Be(archivedAt);
+        result.ArchiveReason.Should().Be("Không còn phù hợp");
+        result.ArchivedFromStatus.Should().Be(nameof(DocumentStatus.Indexed));
+
+        document.ArchivedByUserId = null;
+        document.ArchivedByUser = null;
+        document.ArchivedAt = null;
+        document.ArchiveReason = null;
+        document.ArchivedFromStatus = null;
+
+        var legacyResult = await _documentService.GetDocumentByIdAsync(docId);
+
+        legacyResult.Should().NotBeNull();
+        legacyResult!.ArchivedByEmail.Should().BeNull();
+        legacyResult.ArchivedAt.Should().BeNull();
+        legacyResult.ArchiveReason.Should().BeNull();
+        legacyResult.ArchivedFromStatus.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ArchiveDocumentAsync_ShouldRejectProcessingDocument()
+    {
+        const int docId = 304;
+        var document = new Document { Id = docId, Status = DocumentStatus.Processing };
+        _documentRepoMock.Setup(r => r.GetByIdAsync(docId)).ReturnsAsync(document);
+
+        var act = () => _documentService.ArchiveDocumentAsync(docId, "admin-user-id", "Đang xử lý");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Không thể tạm ẩn tài liệu khi hệ thống đang xử lý.");
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task ArchiveDocumentAsync_ShouldRejectAlreadyArchivedDocument()
+    {
+        const int docId = 305;
+        var document = new Document { Id = docId, Status = DocumentStatus.Archived };
+        _documentRepoMock.Setup(r => r.GetByIdAsync(docId)).ReturnsAsync(document);
+
+        var act = () => _documentService.ArchiveDocumentAsync(docId, "admin-user-id", "Archive lại");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Tài liệu đã được tạm ẩn khỏi RAG.");
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Never);
+        _realtimeNotifierMock.Verify(
+            n => n.NotifyDocumentChangedAsync(
+                It.IsAny<DocumentRealtimeNotification>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ArchiveDocumentAsync_ShouldRejectMissingReason(string? reason)
+    {
+        var act = () => _documentService.ArchiveDocumentAsync(308, "admin-user-id", reason!);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("Lý do tạm ẩn là bắt buộc.*");
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task ArchiveDocumentAsync_ShouldRejectReasonLongerThan1000Characters()
+    {
+        var act = () => _documentService.ArchiveDocumentAsync(309, "admin-user-id", new string('a', 1001));
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("Lý do tạm ẩn không được vượt quá 1000 ký tự.*");
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task ArchiveDocumentAsync_ShouldRejectMissingActor(string? actorUserId)
+    {
+        var act = () => _documentService.ArchiveDocumentAsync(310, actorUserId!, "Lý do hợp lệ");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Không xác định được tài khoản thực hiện tạm ẩn.");
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessDocumentAsync_ShouldRejectArchivedDocument()
+    {
+        const int docId = 306;
+        _documentRepoMock.Setup(r => r.GetByIdAsync(docId))
+            .ReturnsAsync(new Document { Id = docId, Status = DocumentStatus.Archived });
+
+        var act = () => _documentService.ProcessDocumentAsync(docId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
+        _documentRepoMock.Verify(
+            r => r.UpdateStatusAsync(It.IsAny<int>(), It.IsAny<DocumentStatus>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task EnqueueProcessDocumentAsync_ShouldRejectArchivedDocument()
+    {
+        const int docId = 307;
+        _documentRepoMock.Setup(r => r.GetByIdAsync(docId))
+            .ReturnsAsync(new Document { Id = docId, Status = DocumentStatus.Archived });
+
+        var act = () => _documentService.EnqueueProcessDocumentAsync(docId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
+        _documentRepoMock.Verify(
+            r => r.UpdateStatusAsync(It.IsAny<int>(), It.IsAny<DocumentStatus>(), It.IsAny<string?>()),
+            Times.Never);
     }
 }

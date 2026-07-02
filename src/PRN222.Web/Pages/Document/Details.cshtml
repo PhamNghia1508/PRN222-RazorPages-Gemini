@@ -4,11 +4,14 @@
 @{
     ViewData["Title"] = Model.Document.OriginalFileName;
     var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
     var canViewChunks = Model.CanViewChunks;
     var isCompleted = string.Equals(Model.Document.Status, "Indexed", StringComparison.OrdinalIgnoreCase)
         || string.Equals(Model.Document.Status, "Completed", StringComparison.OrdinalIgnoreCase);
     var isProcessing = string.Equals(Model.Document.Status, "Processing", StringComparison.OrdinalIgnoreCase);
     var isFailed = string.Equals(Model.Document.Status, "Failed", StringComparison.OrdinalIgnoreCase);
+    var isArchived = string.Equals(Model.Document.Status, "Archived", StringComparison.OrdinalIgnoreCase);
+    var canArchive = isAdmin && !isProcessing && !isArchived;
 
     string StatusClass(string status)
     {
@@ -18,6 +21,7 @@
             "completed" => "status-good",
             "processing" => "status-running",
             "failed" => "status-bad",
+            "archived" => "status-muted",
             _ => "status-muted"
         };
     }
@@ -30,6 +34,7 @@
             "completed" => "Đã index",
             "processing" => "Đang xử lý",
             "failed" => "Lỗi xử lý",
+            "archived" => "Đã tạm ẩn",
             _ => status ?? "Chưa rõ"
         };
     }
@@ -72,21 +77,14 @@
                 </button>
             </form>
         }
-        @if (canUploadDocuments)
+        @if (canArchive)
         {
-            <form asp-page-handler="Delete"
-                  asp-route-id="@Model.Document.Id"
-                  method="post"
-                  class="js-toast-confirm-form"
-                  data-toast-confirm="true"
-                  data-confirm-title="Xác nhận xóa tài liệu"
-                  data-confirm-action="Xóa tài liệu"
-                  data-confirm-message="Xóa tài liệu sẽ gỡ nguồn đã index và không thể hoàn tác trong bản demo này.">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-outline-danger">
-                    <i class="bi bi-trash3"></i> Xóa
-                </button>
-            </form>
+            <button type="button"
+                    class="btn btn-outline-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#archiveDocumentModal">
+                <i class="bi bi-archive"></i> Tạm ẩn khỏi RAG
+            </button>
         }
     </div>
 </section>
@@ -228,35 +226,74 @@
     </div>
 </section>
 
+@if (isArchived)
+{
+    <section class="workspace-panel fade-in-up" aria-labelledby="archive-audit-title">
+        <div class="workspace-panel-header">
+            <div>
+                <span class="section-kicker">Archive audit</span>
+                <h2 id="archive-audit-title">Thông tin tạm ẩn</h2>
+            </div>
+        </div>
+        @if (Model.Document.ArchivedAt.HasValue)
+        {
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Người thực hiện</dt>
+                <dd class="col-sm-9">@(Model.Document.ArchivedByEmail ?? "Tài khoản không còn khả dụng")</dd>
+                <dt class="col-sm-3">Thời gian</dt>
+                <dd class="col-sm-9">@Model.Document.ArchivedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</dd>
+                <dt class="col-sm-3">Trạng thái trước đó</dt>
+                <dd class="col-sm-9">@(Model.Document.ArchivedFromStatus ?? "Không xác định")</dd>
+                <dt class="col-sm-3">Lý do</dt>
+                <dd class="col-sm-9">@(Model.Document.ArchiveReason ?? "Không có lý do được lưu")</dd>
+            </dl>
+        }
+        else
+        {
+            <div class="inline-alert mb-0">
+                <i class="bi bi-info-circle"></i>
+                <span>Chưa có dữ liệu audit cho lần tạm ẩn này.</span>
+            </div>
+        }
+    </section>
+}
+
+@if (canArchive)
+{
+    <div class="modal fade" id="archiveDocumentModal" tabindex="-1" aria-labelledby="archiveDocumentModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form asp-page-handler="Archive" asp-route-id="@Model.Document.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="archiveDocumentModalLabel">Xác nhận tạm ẩn tài liệu</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Tài liệu sẽ bị tạm ẩn khỏi RAG nhưng vẫn được giữ lại để truy vết. Bạn có chắc chắn không?</p>
+                        <label for="archiveReason" class="form-label">Lý do tạm ẩn</label>
+                        <textarea id="archiveReason"
+                                  name="archiveReason"
+                                  class="form-control"
+                                  rows="4"
+                                  maxlength="1000"
+                                  required></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-archive"></i> Tạm ẩn khỏi RAG
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
-    <script src="~/js/governance.js" asp-append-version="true"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('.js-toast-confirm-form[data-toast-confirm="true"]').forEach(function (form) {
-                if (form.dataset.toastConfirmBound === 'true') {
-                    return;
-                }
-
-                form.dataset.toastConfirmBound = 'true';
-                form.addEventListener('submit', function (event) {
-                    event.preventDefault();
-
-                    if (!window.GovernancePage?.showGovernanceConfirmToast) {
-                        form.submit();
-                        return;
-                    }
-
-                    window.GovernancePage.showGovernanceConfirmToast({
-                        title: form.dataset.confirmTitle || 'Xác nhận thao tác',
-                        message: form.dataset.confirmMessage || 'Bạn có chắc chắn muốn tiếp tục?',
-                        actionLabel: form.dataset.confirmAction || 'Tiếp tục',
-                        onConfirm: function () {
-                            form.submit();
-                        }
-                    });
-                });
-            });
-
             @if (isProcessing)
             {
                 <text>window.setTimeout(function () { window.location.reload(); }, 5000);</text>

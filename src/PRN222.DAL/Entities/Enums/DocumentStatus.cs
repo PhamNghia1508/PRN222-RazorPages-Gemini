@@ -15,5 +15,8 @@ public enum DocumentStatus
     Indexed = 2,
 
     /// <summary>Processing failed due to an error.</summary>
-    Failed = 3
+    Failed = 3,
+
+    /// <summary>Document is retained for traceability but excluded from RAG retrieval.</summary>
+    Archived = 4
 }

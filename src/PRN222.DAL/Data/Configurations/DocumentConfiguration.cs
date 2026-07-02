@@ -36,6 +36,13 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
             .HasConversion<string>()
             .HasMaxLength(20);
 
+        builder.Property(d => d.ArchiveReason)
+            .HasMaxLength(1000);
+
+        builder.Property(d => d.ArchivedFromStatus)
+            .HasConversion<string>()
+            .HasMaxLength(20);
+
         // Relationships
         builder.HasOne(d => d.Course)
             .WithMany(c => c.Documents)
@@ -47,8 +54,14 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
             .HasForeignKey(d => d.EmbeddingModelId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(d => d.ArchivedByUser)
+            .WithMany()
+            .HasForeignKey(d => d.ArchivedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Indexes
         builder.HasIndex(d => d.CourseId);
         builder.HasIndex(d => d.Status);
+        builder.HasIndex(d => d.ArchivedByUserId);
     }
 }

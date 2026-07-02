@@ -31,6 +31,6 @@ public interface IDocumentService
     /// <summary>Enqueue document processing to run asynchronously in the background.</summary>
     Task EnqueueProcessDocumentAsync(int documentId);
 
-    /// <summary>Delete a document and its associated file and chunks.</summary>
-    Task DeleteDocumentAsync(int id);
+    /// <summary>Retain a document while excluding it from future RAG retrieval.</summary>
+    Task ArchiveDocumentAsync(int id, string archivedByUserId, string archiveReason);
 }

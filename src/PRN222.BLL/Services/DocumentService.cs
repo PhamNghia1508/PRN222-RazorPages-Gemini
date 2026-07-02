@@ -157,6 +157,10 @@ public class DocumentService : IDocumentService
             CourseId = document.CourseId,
             CreatedAt = document.CreatedAt,
             UpdatedAt = document.UpdatedAt,
+            ArchivedByEmail = document.ArchivedByUser?.Email,
+            ArchivedAt = document.ArchivedAt,
+            ArchiveReason = document.ArchiveReason,
+            ArchivedFromStatus = document.ArchivedFromStatus?.ToString(),
             ExtractedTextPreview = document.ExtractedText?.Length > 2000
                 ? document.ExtractedText[..2000] + "..."
                 : document.ExtractedText,
@@ -259,6 +263,10 @@ public class DocumentService : IDocumentService
         if (document == null)
         {
             throw new InvalidOperationException($"Document with ID {documentId} not found.");
+        }
+        if (document.Status == DocumentStatus.Archived)
+        {
+            throw new InvalidOperationException("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
         }
 
         try
@@ -425,6 +433,10 @@ public class DocumentService : IDocumentService
         {
             throw new InvalidOperationException($"Document with ID {documentId} not found.");
         }
+        if (document.Status == DocumentStatus.Archived)
+        {
+            throw new InvalidOperationException("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
+        }
 
         // Concurrency Guard: If the document is already in Processing status, do not enqueue again.
         // A stale Processing status can happen after an app restart or worker crash, so allow retry
@@ -497,44 +509,54 @@ public class DocumentService : IDocumentService
         return document.UpdatedAt.Value <= DateTime.UtcNow.Subtract(_processingRetryAfter);
     }
 
-    public async Task DeleteDocumentAsync(int id)
+    public async Task ArchiveDocumentAsync(int id, string archivedByUserId, string archiveReason)
     {
-        var document = await _documentRepository.GetWithChunksAsync(id);
+        if (string.IsNullOrWhiteSpace(archivedByUserId))
+        {
+            throw new InvalidOperationException("Không xác định được tài khoản thực hiện tạm ẩn.");
+        }
+
+        if (string.IsNullOrWhiteSpace(archiveReason))
+        {
+            throw new ArgumentException("Lý do tạm ẩn là bắt buộc.", nameof(archiveReason));
+        }
+
+        var normalizedReason = archiveReason.Trim();
+        if (normalizedReason.Length > 1000)
+        {
+            throw new ArgumentException(
+                "Lý do tạm ẩn không được vượt quá 1000 ký tự.",
+                nameof(archiveReason));
+        }
+
+        var document = await _documentRepository.GetByIdAsync(id);
         if (document == null)
         {
             throw new InvalidOperationException($"Document with ID {id} not found.");
         }
 
-        var chunkIds = document.Chunks.Select(c => c.Id).ToList();
+        if (document.Status == DocumentStatus.Archived)
+        {
+            throw new InvalidOperationException("Tài liệu đã được tạm ẩn khỏi RAG.");
+        }
 
-        DeleteChunkDependents(chunkIds);
+        if (document.Status == DocumentStatus.Processing)
+        {
+            throw new InvalidOperationException("Không thể tạm ẩn tài liệu khi hệ thống đang xử lý.");
+        }
 
-        // 1. Delete from database first. Chunks and embeddings cascade from Document,
-        // while citations and generated QA pairs are removed above because SQL Server
-        // blocks multiple cascade paths for those relationships.
-        _documentRepository.Delete(document);
+        var archivedAt = DateTime.UtcNow;
+        document.ArchivedFromStatus = document.Status;
+        document.ArchivedByUserId = archivedByUserId;
+        document.ArchiveReason = normalizedReason;
+        document.ArchivedAt = archivedAt;
+        document.Status = DocumentStatus.Archived;
+        document.UpdatedAt = archivedAt;
         await _unitOfWork.SaveChangesAsync();
-        DeleteChunkImageFiles(chunkIds);
 
-        // 2. Only delete the physical file from disk after database save commits successfully
-        try
-        {
-            if (File.Exists(document.StoragePath))
-            {
-                File.Delete(document.StoragePath);
-            }
-        }
-        catch (Exception ex)
-        {
-            // If physical file deletion fails (e.g. file is locked), log a warning,
-            // but the database remains consistent and the application state is intact.
-            _logger.LogWarning(ex, "Failed to delete physical file at '{StoragePath}' after document database record (ID: {DocumentId}) was deleted.",
-                document.StoragePath, id);
-        }
+        await NotifyDocumentChangedAsync(document, "archived", DocumentStatus.Archived);
 
-        await NotifyDocumentChangedAsync(document, "deleted");
-
-        _logger.LogInformation("Document deleted: {FileName} (ID: {DocumentId})",
+        _logger.LogInformation("Document archived from RAG: {FileName} (ID: {DocumentId})",
             document.OriginalFileName, id);
     }
 

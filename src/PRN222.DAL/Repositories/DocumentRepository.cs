@@ -29,6 +29,7 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
     {
         return await _dbSet
             .Include(d => d.Course)
+            .Include(d => d.ArchivedByUser)
             .Include(d => d.Chunks.OrderBy(c => c.ChunkIndex))
                 .ThenInclude(c => c.Embeddings)
             .FirstOrDefaultAsync(d => d.Id == documentId);

@@ -2,6 +2,7 @@
 @model PRN222.Web.Pages.Document.IndexModel
 @{
     var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
     var documents = Model.Documents.Items.ToList();
     var search = Model.Search;
     var courseId = Model.SelectedCourseId;
@@ -32,6 +33,7 @@
             "completed" => "status-good",
             "processing" => "status-running",
             "failed" => "status-bad",
+            "archived" => "status-muted",
             _ => "status-muted"
         };
     }
@@ -45,6 +47,7 @@
             "uploaded" => "Chờ xử lý",
             "processing" => "Đang xử lý",
             "failed" => "Lỗi",
+            "archived" => "Đã tạm ẩn",
             _ => status ?? "Chưa rõ"
         };
     }
@@ -112,6 +115,7 @@
                 <option value="Processing" selected="@(selectedStatus == "Processing")">Đang xử lý</option>
                 <option value="Indexed" selected="@(selectedStatus == "Indexed")">Đã index</option>
                 <option value="Failed" selected="@(selectedStatus == "Failed")">Lỗi</option>
+                <option value="Archived" selected="@(selectedStatus == "Archived")">Đã tạm ẩn</option>
             </select>
         </div>
         <div class="knowledge-filter-field">
@@ -187,6 +191,18 @@
                             <i class="bi bi-eye"></i>
                             <span>Chi tiết</span>
                         </a>
+                        @if (isAdmin &&
+                            !string.Equals(document.Status, "Processing", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(document.Status, "Archived", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger js-document-archive-trigger"
+                                    data-document-id="@document.Id"
+                                    data-document-name="@document.OriginalFileName">
+                                <i class="bi bi-archive"></i>
+                                <span>Tạm ẩn khỏi RAG</span>
+                            </button>
+                        }
                     </div>
                 </article>
             }

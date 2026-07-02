@@ -17,6 +17,10 @@ public class DocumentDetailDto
     public int CourseId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? ArchivedByEmail { get; set; }
+    public DateTime? ArchivedAt { get; set; }
+    public string? ArchiveReason { get; set; }
+    public string? ArchivedFromStatus { get; set; }
 
     /// <summary>Preview of the extracted text (first 2000 characters).</summary>
     public string? ExtractedTextPreview { get; set; }

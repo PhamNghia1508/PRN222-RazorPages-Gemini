@@ -48,8 +48,17 @@ public class Document
 
     public DateTime? UpdatedAt { get; set; }
 
+    public string? ArchivedByUserId { get; set; }
+
+    public DateTime? ArchivedAt { get; set; }
+
+    public string? ArchiveReason { get; set; }
+
+    public DocumentStatus? ArchivedFromStatus { get; set; }
+
     // Navigation properties
     public Course Course { get; set; } = null!;
     public EmbeddingModel? EmbeddingModel { get; set; }
+    public ApplicationUser? ArchivedByUser { get; set; }
     public ICollection<DocumentChunk> Chunks { get; set; } = new List<DocumentChunk>();
 }

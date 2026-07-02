@@ -94,11 +94,18 @@ public class DetailsModel(
         });
     }
 
-    public async Task<IActionResult> OnPostDeleteAsync(int id)
+    public async Task<IActionResult> OnPostArchiveAsync(int id, string? archiveReason)
     {
-        if (!CanUploadDocuments())
+        if (!User.IsInRole(ApplicationRoles.Admin))
         {
             return Forbid();
+        }
+
+        var archivedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(archivedByUserId))
+        {
+            TempData["Error"] = "Không xác định được tài khoản thực hiện tạm ẩn.";
+            return Redirect($"/Document/Details/{id}");
         }
 
         try
@@ -114,13 +121,23 @@ public class DetailsModel(
                 return Forbid();
             }
 
-            await documentService.DeleteDocumentAsync(id);
-            TempData["Success"] = "Tai lieu da duoc xoa thanh cong.";
+            await documentService.ArchiveDocumentAsync(id, archivedByUserId, archiveReason!);
+            TempData["Success"] = "Đã tạm ẩn tài liệu khỏi RAG. Tài liệu vẫn được giữ lại để truy vết.";
+        }
+        catch (ArgumentException ex)
+        {
+            logger.LogWarning(ex, "Invalid archive request for document {DocumentId}", id);
+            TempData["Error"] = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "Cannot archive document {DocumentId}", id);
+            TempData["Error"] = ex.Message;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error deleting document {DocumentId}", id);
-            TempData["Error"] = "Khong the xoa tai lieu luc nay. Vui long thu lai sau.";
+            logger.LogError(ex, "Error archiving document {DocumentId}", id);
+            TempData["Error"] = "Không thể tạm ẩn tài liệu lúc này. Vui lòng thử lại sau.";
         }
 
         return Redirect("/Document");
