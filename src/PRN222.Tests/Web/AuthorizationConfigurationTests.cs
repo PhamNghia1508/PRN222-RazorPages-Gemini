@@ -163,8 +163,17 @@ public class AuthorizationConfigurationTests
         var tabsView = File.ReadAllText(FindRepositoryFile("src", "PRN222.Web", "Pages", "Shared", "_StaffGovernanceTabs.cshtml"));
         var accountsView = File.ReadAllText(FindRepositoryFile("src", "PRN222.Web", "Pages", "Admin", "Accounts.cshtml"));
 
-        layoutView.Should().Contain("<span>Nhân sự &amp; Khoa</span>");
-        layoutView.Should().Contain("aria-current=\"@(governanceNavActive ? \"page\" : null)\"");
+        layoutView.Should().Contain("TỔNG QUAN");
+        layoutView.Should().Contain("QUẢN TRỊ HỌC VỤ");
+        layoutView.Should().Contain("QUẢN TRỊ TRI THỨC RAG");
+        layoutView.Should().Contain("<span>Nhân sự &amp; Tài khoản</span>");
+        layoutView.Should().Contain("<span>Khoa/Bộ môn</span>");
+        layoutView.Should().Contain("<span>Kho học liệu</span>");
+        layoutView.Should().Contain("<span>Duyệt tri thức &amp; Nhật ký</span>");
+        layoutView.Should().Contain("asp-page=\"/Department/Index\"");
+        layoutView.Should().Contain("asp-page=\"/Knowledge/Index\"");
+        layoutView.Should().Contain("aria-current=\"@(string.Equals(currentController, \"Department\"");
+        layoutView.Should().Contain("aria-current=\"@(string.Equals(currentController, \"Admin\"");
         layoutView.Should().NotContain("<span>Quản lý Khoa</span>");
         tabsView.Should().Contain("aria-current=");
         tabsView.Should().Contain("Tài khoản giảng viên");

@@ -6,6 +6,7 @@
 @{
     ViewData["Title"] = "Tổng quan";
     var hasIndexedDocuments = Model.Dashboard.IndexedDocuments > 0;
+    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
     var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
     var canOperateModels = User.IsInRole(ApplicationRoles.Admin)
         || User.IsInRole(ApplicationRoles.HeadLecturer);
@@ -19,6 +20,7 @@
             "uploaded" => "Chờ xử lý",
             "processing" => "Đang xử lý",
             "failed" => "Lỗi",
+            "archived" => "Đã tạm ẩn",
             _ => status ?? "Chưa rõ"
         };
     }
@@ -31,6 +33,7 @@
             "completed" => "status-indexed",
             "processing" => "status-processing",
             "failed" => "status-failed",
+            "archived" => "status-uploaded",
             _ => "status-uploaded"
         };
     }
@@ -52,9 +55,23 @@
 
 <section class="ops-hero fade-in-up">
     <div>
-        <span class="section-kicker">Bảng điều khiển giảng viên</span>
+        @if (isAdmin)
+        {
+            <span class="section-kicker">Bảng điều khiển quản trị</span>
+        }
+        else
+        {
+            <span class="section-kicker">Bảng điều khiển giảng viên</span>
+        }
         <h1>Tổng quan hệ thống RAG</h1>
-        <p>Theo dõi độ sẵn sàng của tài liệu, phạm vi môn học, chunk đã index và bước nên làm tiếp trong quy trình demo.</p>
+        @if (isAdmin)
+        {
+            <p>Theo dõi toàn bộ học liệu, môn học, tài khoản, trạng thái index và chất lượng RAG trong hệ thống.</p>
+        }
+        else
+        {
+            <p>Theo dõi độ sẵn sàng của tài liệu, phạm vi môn học, chunk đã index và bước nên làm tiếp trong quy trình demo.</p>
+        }
     </div>
     <div class="hero-action-stack">
         @if (canUploadDocuments)
@@ -79,8 +96,8 @@
 </section>
 
 <div class="poetic-tabs-container fade-in-up stagger-1">
-    <button type="button" class="poetic-tab-btn active" data-tab-target="rag-system" aria-pressed="true">Hệ thống RAG</button>
-    <button type="button" class="poetic-tab-btn" data-tab-target="student-insights" aria-pressed="false">Trải nghiệm sinh viên</button>
+    <button type="button" class="poetic-tab-btn active" data-tab-target="rag-system" aria-pressed="true">@(isAdmin ? "Tổng quan hệ thống" : "Hệ thống RAG")</button>
+    <button type="button" class="poetic-tab-btn" data-tab-target="student-insights" aria-pressed="false">@(isAdmin ? "Giám sát trải nghiệm sinh viên" : "Trải nghiệm sinh viên")</button>
     <button type="button" class="poetic-tab-btn" data-tab-target="knowledge-curation" aria-pressed="false">
         Duyệt tri thức &amp; Nhật ký
         @if (ViewData["UserDepartmentName"] != null)

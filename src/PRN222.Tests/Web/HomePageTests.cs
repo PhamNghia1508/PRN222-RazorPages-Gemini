@@ -15,6 +15,21 @@ namespace PRN222.Tests.Web;
 public class HomePageTests
 {
     [Fact]
+    public void IndexView_ShouldUseSystemAdministratorCopy()
+    {
+        var source = File.ReadAllText(FindRepositoryFile(
+            "src", "PRN222.Web", "Pages", "Index.cshtml"));
+
+        source.Should().Contain("var isAdmin = User.IsInRole(ApplicationRoles.Admin);");
+        source.Should().Contain("@if (isAdmin)");
+        source.Should().Contain("Bảng điều khiển quản trị");
+        source.Should().Contain("Theo dõi toàn bộ học liệu, môn học, tài khoản, trạng thái index và chất lượng RAG trong hệ thống.");
+        source.Should().Contain("isAdmin ? \"Tổng quan hệ thống\" : \"Hệ thống RAG\"");
+        source.Should().Contain("isAdmin ? \"Giám sát trải nghiệm sinh viên\" : \"Trải nghiệm sinh viên\"");
+        source.Should().Contain("\"archived\" => \"Đã tạm ẩn\"");
+    }
+
+    [Fact]
     public async Task IndexPage_ShouldBuildOverviewDashboardViewModel()
     {
         var documents = new[]
@@ -62,5 +77,22 @@ public class HomePageTests
         page.Dashboard.IndexedDocuments.Should().Be(1);
         page.Dashboard.IndexedChunks.Should().Be(8);
         page.Dashboard.TotalCourses.Should().Be(1);
+    }
+
+    private static string FindRepositoryFile(params string[] pathParts)
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            var candidate = Path.Combine([current.FullName, .. pathParts]);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repository file: {Path.Combine(pathParts)}");
     }
 }

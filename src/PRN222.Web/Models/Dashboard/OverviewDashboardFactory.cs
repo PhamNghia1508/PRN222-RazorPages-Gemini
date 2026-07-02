@@ -16,7 +16,7 @@ public static class OverviewDashboardFactory
             FailedDocuments = documents.FailedDocuments,
             IndexedChunks = documents.IndexedChunks,
             TotalCourses = courses.TotalCourses,
-            EvaluationStatus = documents.IndexedDocuments > 0 ? "Sáºµn sÃ ng" : "Thiáº¿u dá»¯ liá»‡u",
+            EvaluationStatus = documents.IndexedDocuments > 0 ? "Sẵn sàng" : "Thiếu dữ liệu",
             PipelineSteps = BuildPipelineSteps(
                 documents.TotalDocuments,
                 documents.UploadedDocuments,

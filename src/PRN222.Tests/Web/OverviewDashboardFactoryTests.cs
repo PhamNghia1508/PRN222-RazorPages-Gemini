@@ -29,6 +29,8 @@ public class OverviewDashboardFactoryTests
         result.IndexedChunks.Should().Be(4);
         result.IndexedDocuments.Should().Be(1);
         result.FailedDocuments.Should().Be(1);
+        result.EvaluationStatus.Should().Be("Sẵn sàng");
+        result.EvaluationStatus.Should().NotContain("Sáºµn sÃ");
         result.RecentDocuments.Should().HaveCount(3);
         result.RecentDocuments.First().OriginalFileName.Should().Be("C.pdf");
         result.PipelineSteps.Should().ContainSingle(s => s.Key == "embed" && s.Status == "Ready");
@@ -45,5 +47,24 @@ public class OverviewDashboardFactoryTests
         result.TotalDocuments.Should().Be(0);
         result.PipelineSteps.Should().ContainSingle(s => s.Key == "upload" && s.Status == "Needs input");
         result.NextActions.Should().ContainSingle(a => a.Label == "Nạp tài liệu đầu tiên" && a.IsEnabled);
+    }
+
+    [Fact]
+    public void Build_FromDashboardSummaries_ShouldUseValidVietnameseEvaluationStatus()
+    {
+        var documents = new DocumentDashboardSummaryDto(
+            TotalDocuments: 1,
+            IndexedDocuments: 1,
+            FailedDocuments: 0,
+            ProcessingDocuments: 0,
+            UploadedDocuments: 0,
+            IndexedChunks: 4,
+            RecentDocuments: []);
+        var courses = new CourseDashboardSummaryDto(TotalCourses: 1, CourseIds: [1]);
+
+        var result = OverviewDashboardFactory.Build(documents, courses);
+
+        result.EvaluationStatus.Should().Be("Sẵn sàng");
+        result.EvaluationStatus.Should().NotContain("Sáºµn sÃ");
     }
 }

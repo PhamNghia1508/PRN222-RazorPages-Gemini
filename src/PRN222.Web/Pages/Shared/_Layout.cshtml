@@ -34,9 +34,6 @@
             : "app-nav-link";
     }
 
-    var governanceNavActive = string.Equals(currentController, "Admin", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(currentController, "Department", StringComparison.OrdinalIgnoreCase);
-    var governanceNavClass = governanceNavActive ? "app-nav-link active" : "app-nav-link";
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -68,45 +65,82 @@
             </a>
 
             <nav class="app-nav" aria-label="Main navigation">
-                <div class="nav-section-title">Không gian số</div>
-                <a class="@NavClass("Chat")" asp-page="/Chat/Session">
-                    <i class="ph-light ph-sparkle"></i><span>Vấn đáp & Tư duy</span>
-                </a>
-                @if (isManagementUser)
+                @if (isAdmin)
                 {
+                    <div class="nav-section-title">TỔNG QUAN</div>
                     <a class="@NavClass("Home")" href="/">
                         <i class="ph-light ph-chart-line-up"></i><span>Tổng quan</span>
                     </a>
-                    @if (canOperateModels)
-                    {
+
+                    <div class="nav-section-title">QUẢN TRỊ HỌC VỤ</div>
+                    <a class="@NavClass("Course")" asp-page="/Course/Index">
+                        <i class="ph-light ph-notebook"></i><span>Môn học</span>
+                    </a>
+                    <a class="@NavClass("Department")"
+                       aria-current="@(string.Equals(currentController, "Department", StringComparison.OrdinalIgnoreCase) ? "page" : null)"
+                       asp-page="/Department/Index">
+                        <i class="ph-light ph-buildings"></i><span>Khoa/Bộ môn</span>
+                    </a>
+                    <a class="@NavClass("Admin")"
+                       aria-current="@(string.Equals(currentController, "Admin", StringComparison.OrdinalIgnoreCase) ? "page" : null)"
+                       asp-page="/Admin/Accounts">
+                        <i class="ph-light ph-users-three"></i><span>Nhân sự &amp; Tài khoản</span>
+                    </a>
+
+                    <div class="nav-section-title">QUẢN TRỊ TRI THỨC RAG</div>
+                    <a class="@NavClass("Document")" asp-page="/Document/Index">
+                        <i class="ph-light ph-folder-open"></i><span>Kho học liệu</span>
+                    </a>
                     <a class="@NavClass("Finetune")" asp-page="/Finetune/Index">
                         <i class="ph-light ph-magic-wand"></i><span>Dữ liệu fine-tune</span>
-                    </a>
-                    <a class="@NavClass("Document")" asp-page="/Document/Index">
-                        <i class="ph-light ph-folder-open"></i><span>Lưu trữ học liệu</span>
-                    </a>
-                    <a class="@NavClass("Evaluation")" asp-page="/Evaluation/Index">
-                        <i class="ph-light ph-chart-polar"></i><span>Benchmark</span>
                     </a>
                     <a class="@NavClass("TestSetGenerator")" asp-page="/TestSetGenerator/Index">
                         <i class="ph-light ph-check-square-offset"></i><span>Sinh test set</span>
                     </a>
-                    }
-                    @if (!canOperateModels)
-                    {
-                        <a class="@NavClass("Document")" asp-page="/Document/Index">
-                            <i class="ph-light ph-folder-open"></i><span>Lưu trữ học liệu</span>
-                        </a>
-                    }
-                    <a class="@NavClass("Course")" asp-page="/Course/Index">
-                        <i class="ph-light ph-notebook"></i><span>Môn học</span>
+                    <a class="@NavClass("Evaluation")" asp-page="/Evaluation/Index">
+                        <i class="ph-light ph-chart-polar"></i><span>Benchmark</span>
                     </a>
-                    @if (isAdmin)
+                    <a class="@NavClass("Knowledge")" asp-page="/Knowledge/Index">
+                        <i class="ph-light ph-clipboard-text"></i><span>Duyệt tri thức &amp; Nhật ký</span>
+                    </a>
+                    <a class="@NavClass("Chat")" asp-page="/Chat/Session">
+                        <i class="ph-light ph-sparkle"></i><span>Vấn đáp &amp; Tư duy</span>
+                    </a>
+                }
+                else
+                {
+                    <div class="nav-section-title">Không gian số</div>
+                    <a class="@NavClass("Chat")" asp-page="/Chat/Session">
+                        <i class="ph-light ph-sparkle"></i><span>Vấn đáp &amp; Tư duy</span>
+                    </a>
+                    @if (isManagementUser)
                     {
-                        <a class="@governanceNavClass"
-                           aria-current="@(governanceNavActive ? "page" : null)"
-                           asp-page="/Admin/Accounts">
-                            <i class="ph-light ph-users-three"></i><span>Nhân sự &amp; Khoa</span>
+                        <a class="@NavClass("Home")" href="/">
+                            <i class="ph-light ph-chart-line-up"></i><span>Tổng quan</span>
+                        </a>
+                        @if (canOperateModels)
+                        {
+                            <a class="@NavClass("Finetune")" asp-page="/Finetune/Index">
+                                <i class="ph-light ph-magic-wand"></i><span>Dữ liệu fine-tune</span>
+                            </a>
+                            <a class="@NavClass("Document")" asp-page="/Document/Index">
+                                <i class="ph-light ph-folder-open"></i><span>Lưu trữ học liệu</span>
+                            </a>
+                            <a class="@NavClass("Evaluation")" asp-page="/Evaluation/Index">
+                                <i class="ph-light ph-chart-polar"></i><span>Benchmark</span>
+                            </a>
+                            <a class="@NavClass("TestSetGenerator")" asp-page="/TestSetGenerator/Index">
+                                <i class="ph-light ph-check-square-offset"></i><span>Sinh test set</span>
+                            </a>
+                        }
+                        @if (!canOperateModels)
+                        {
+                            <a class="@NavClass("Document")" asp-page="/Document/Index">
+                                <i class="ph-light ph-folder-open"></i><span>Lưu trữ học liệu</span>
+                            </a>
+                        }
+                        <a class="@NavClass("Course")" asp-page="/Course/Index">
+                            <i class="ph-light ph-notebook"></i><span>Môn học</span>
                         </a>
                     }
                 }
