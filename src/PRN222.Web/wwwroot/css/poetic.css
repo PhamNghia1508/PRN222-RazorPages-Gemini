@@ -66,6 +66,10 @@ body::after {
     z-index: 1;
 }
 
+body.modal-open .app-content {
+    z-index: auto;
+}
+
 /* ==========================================================
    SECTION 4: SCROLLBAR (sợi chỉ đánh dấu trang)
    ========================================================== */
