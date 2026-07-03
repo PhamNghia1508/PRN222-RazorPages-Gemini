@@ -17,6 +17,9 @@ public class DocumentUploadDto
     /// <summary>Size of the file in bytes.</summary>
     public long FileSize { get; set; }
 
+    /// <summary>Authenticated user who uploaded the document.</summary>
+    public string UploadedByUserId { get; set; } = string.Empty;
+
     /// <summary>Chunk size in characters for text splitting.</summary>
     public int ChunkSize { get; set; } = 512;
 

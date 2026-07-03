@@ -15,12 +15,19 @@ public class DocumentDetailDto
     public string? ErrorMessage { get; set; }
     public string CourseName { get; set; } = string.Empty;
     public int CourseId { get; set; }
+    public string? DepartmentName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? UploadedByUserId { get; set; }
+    public string? UploadedByEmail { get; set; }
+    public DateTime? UploadedAt { get; set; }
     public string? ArchivedByEmail { get; set; }
     public DateTime? ArchivedAt { get; set; }
     public string? ArchiveReason { get; set; }
     public string? ArchivedFromStatus { get; set; }
+    public string? CancelledByEmail { get; set; }
+    public DateTime? CancelledAt { get; set; }
+    public string? CancellationReason { get; set; }
 
     /// <summary>Preview of the extracted text (first 2000 characters).</summary>
     public string? ExtractedTextPreview { get; set; }

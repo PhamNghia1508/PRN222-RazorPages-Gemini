@@ -29,7 +29,10 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
     {
         return await _dbSet
             .Include(d => d.Course)
+                .ThenInclude(course => course.Department)
+            .Include(d => d.UploadedByUser)
             .Include(d => d.ArchivedByUser)
+            .Include(d => d.CancelledByUser)
             .Include(d => d.Chunks.OrderBy(c => c.ChunkIndex))
                 .ThenInclude(c => c.Embeddings)
             .FirstOrDefaultAsync(d => d.Id == documentId);
@@ -39,6 +42,7 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
     {
         return await _dbSet
             .Include(d => d.Course)
+            .Include(d => d.UploadedByUser)
             .FirstOrDefaultAsync(d => d.Id == documentId);
     }
 
@@ -60,5 +64,40 @@ public class DocumentRepository : Repository<Document>, IDocumentRepository
             document.ErrorMessage = errorMessage;
             document.UpdatedAt = DateTime.UtcNow;
         }
+    }
+
+    public async Task<bool> TryCancelUploadedAsync(
+        int documentId,
+        string uploadedByUserId,
+        DateTime cancelledAt,
+        string cancellationReason)
+    {
+        var affectedRows = await _dbSet
+            .Where(document =>
+                document.Id == documentId &&
+                document.UploadedByUserId == uploadedByUserId &&
+                document.Status == DocumentStatus.Uploaded)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(document => document.Status, DocumentStatus.Cancelled)
+                .SetProperty(document => document.CancelledByUserId, uploadedByUserId)
+                .SetProperty(document => document.CancelledAt, cancelledAt)
+                .SetProperty(document => document.CancellationReason, cancellationReason)
+                .SetProperty(document => document.UpdatedAt, cancelledAt));
+
+        return affectedRows == 1;
+    }
+
+    public async Task<bool> TryStartUploadedProcessingAsync(int documentId, DateTime processingStartedAt)
+    {
+        var affectedRows = await _dbSet
+            .Where(document =>
+                document.Id == documentId &&
+                document.Status == DocumentStatus.Uploaded)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(document => document.Status, DocumentStatus.Processing)
+                .SetProperty(document => document.ErrorMessage, (string?)null)
+                .SetProperty(document => document.UpdatedAt, processingStartedAt));
+
+        return affectedRows == 1;
     }
 }

@@ -1,8 +1,10 @@
+@using System.Security.Claims
 @using PRN222.Web.Infrastructure
 @model PRN222.Web.Pages.Document.IndexModel
 @{
     var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
     var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     var documents = Model.Documents.Items.ToList();
     var search = Model.Search;
     var courseId = Model.SelectedCourseId;
@@ -34,6 +36,7 @@
             "processing" => "status-running",
             "failed" => "status-bad",
             "archived" => "status-muted",
+            "cancelled" => "status-muted",
             _ => "status-muted"
         };
     }
@@ -48,6 +51,7 @@
             "processing" => "Đang xử lý",
             "failed" => "Lỗi",
             "archived" => "Đã tạm ẩn",
+            "cancelled" => "Đã hủy tải lên",
             _ => status ?? "Chưa rõ"
         };
     }
@@ -116,6 +120,7 @@
                 <option value="Indexed" selected="@(selectedStatus == "Indexed")">Đã index</option>
                 <option value="Failed" selected="@(selectedStatus == "Failed")">Lỗi</option>
                 <option value="Archived" selected="@(selectedStatus == "Archived")">Đã tạm ẩn</option>
+                <option value="Cancelled" selected="@(selectedStatus == "Cancelled")">Đã hủy tải lên</option>
             </select>
         </div>
         <div class="knowledge-filter-field">
@@ -180,7 +185,14 @@
                         <div class="knowledge-document-meta">
                             <span><i class="bi bi-hdd"></i> @FormatSize(document.FileSize)</span>
                             <span><i class="bi bi-layers"></i> @document.ChunkCount chunk</span>
-                            <span><i class="bi bi-clock"></i> @document.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                            <span>
+                                <i class="bi bi-person"></i>
+                                Người tải lên: @(document.UploadedByEmail ?? "Chưa có dữ liệu")
+                            </span>
+                            <span>
+                                <i class="bi bi-clock"></i>
+                                Tải lên lúc: @(document.UploadedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Chưa có dữ liệu")
+                            </span>
                         </div>
                         <div class="knowledge-progress-track" aria-hidden="true">
                             <span style="width:@(document.ChunkCount > 0 ? 100 : 35)%"></span>
@@ -193,7 +205,8 @@
                         </a>
                         @if (isAdmin &&
                             !string.Equals(document.Status, "Processing", StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(document.Status, "Archived", StringComparison.OrdinalIgnoreCase))
+                            !string.Equals(document.Status, "Archived", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(document.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
                         {
                             <button type="button"
                                     class="btn btn-sm btn-outline-danger js-document-archive-trigger"
@@ -201,6 +214,18 @@
                                     data-document-name="@document.OriginalFileName">
                                 <i class="bi bi-archive"></i>
                                 <span>Tạm ẩn khỏi RAG</span>
+                            </button>
+                        }
+                        @if (canUploadDocuments &&
+                            string.Equals(document.Status, "Uploaded", StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(document.UploadedByUserId, currentUserId, StringComparison.Ordinal))
+                        {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger js-document-cancel-trigger"
+                                    data-document-id="@document.Id"
+                                    data-document-name="@document.OriginalFileName">
+                                <i class="bi bi-x-circle"></i>
+                                <span>Hủy tải nhầm</span>
                             </button>
                         }
                     </div>

@@ -19,4 +19,12 @@ public interface IDocumentRepository : IRepository<Document>
 
     /// <summary>Update the processing status of a document.</summary>
     Task UpdateStatusAsync(int documentId, DocumentStatus status, string? errorMessage = null);
+
+    Task<bool> TryCancelUploadedAsync(
+        int documentId,
+        string uploadedByUserId,
+        DateTime cancelledAt,
+        string cancellationReason);
+
+    Task<bool> TryStartUploadedProcessingAsync(int documentId, DateTime processingStartedAt);
 }

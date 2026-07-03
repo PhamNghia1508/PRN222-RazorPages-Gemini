@@ -33,4 +33,9 @@ public interface IDocumentService
 
     /// <summary>Retain a document while excluding it from future RAG retrieval.</summary>
     Task ArchiveDocumentAsync(int id, string archivedByUserId, string archiveReason);
+
+    Task CancelMistakenUploadAsync(
+        int documentId,
+        string currentUserId,
+        string cancellationReason);
 }

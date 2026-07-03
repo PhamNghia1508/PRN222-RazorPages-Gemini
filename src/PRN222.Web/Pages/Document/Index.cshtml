@@ -1,10 +1,12 @@
 @page "/Document"
+@using System.Security.Claims
 @using PRN222.Web.Infrastructure
 @model PRN222.Web.Pages.Document.IndexModel
 @{
     ViewData["Title"] = "Kho tri thức";
     var canUploadDocuments = User.IsInRole(ApplicationRoles.HeadLecturer);
     var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
     var documents = Model.Documents.Items.ToList();
     var search = Model.Search;
     var courseId = Model.SelectedCourseId;
@@ -36,6 +38,7 @@
             "processing" => "status-running",
             "failed" => "status-bad",
             "archived" => "status-muted",
+            "cancelled" => "status-muted",
             _ => "status-muted"
         };
     }
@@ -50,6 +53,7 @@
             "processing" => "Đang xử lý",
             "failed" => "Lỗi",
             "archived" => "Đã tạm ẩn",
+            "cancelled" => "Đã hủy tải lên",
             _ => status ?? "Chưa rõ"
         };
     }
@@ -144,6 +148,7 @@
                 <option value="Indexed" selected="@(selectedStatus == "Indexed")">Đã index</option>
                 <option value="Failed" selected="@(selectedStatus == "Failed")">Lỗi</option>
                 <option value="Archived" selected="@(selectedStatus == "Archived")">Đã tạm ẩn</option>
+                <option value="Cancelled" selected="@(selectedStatus == "Cancelled")">Đã hủy tải lên</option>
             </select>
         </div>
         <div class="knowledge-filter-field">
@@ -208,7 +213,14 @@
                         <div class="knowledge-document-meta">
                             <span><i class="bi bi-hdd"></i> @FormatSize(document.FileSize)</span>
                             <span><i class="bi bi-layers"></i> @document.ChunkCount chunk</span>
-                            <span><i class="bi bi-clock"></i> @document.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                            <span>
+                                <i class="bi bi-person"></i>
+                                Người tải lên: @(document.UploadedByEmail ?? "Chưa có dữ liệu")
+                            </span>
+                            <span>
+                                <i class="bi bi-clock"></i>
+                                Tải lên lúc: @(document.UploadedAt?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "Chưa có dữ liệu")
+                            </span>
                         </div>
                         <div class="knowledge-progress-track" aria-hidden="true">
                             <span style="width:@(document.ChunkCount > 0 ? 100 : 35)%"></span>
@@ -221,7 +233,8 @@
                         </a>
                         @if (isAdmin &&
                             !string.Equals(document.Status, "Processing", StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(document.Status, "Archived", StringComparison.OrdinalIgnoreCase))
+                            !string.Equals(document.Status, "Archived", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(document.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
                         {
                             <button type="button"
                                     class="btn btn-sm btn-outline-danger js-document-archive-trigger"
@@ -229,6 +242,18 @@
                                     data-document-name="@document.OriginalFileName">
                                 <i class="bi bi-archive"></i>
                                 <span>Tạm ẩn khỏi RAG</span>
+                            </button>
+                        }
+                        @if (canUploadDocuments &&
+                            string.Equals(document.Status, "Uploaded", StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(document.UploadedByUserId, currentUserId, StringComparison.Ordinal))
+                        {
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger js-document-cancel-trigger"
+                                    data-document-id="@document.Id"
+                                    data-document-name="@document.OriginalFileName">
+                                <i class="bi bi-x-circle"></i>
+                                <span>Hủy tải nhầm</span>
                             </button>
                         }
                     </div>
@@ -287,20 +312,63 @@
     </div>
 }
 
+@if (canUploadDocuments)
+{
+    <div class="modal fade" id="cancelUploadModal" tabindex="-1" aria-labelledby="cancelUploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form id="cancelUploadForm" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="cancelUploadModalLabel">Hủy tài liệu tải nhầm</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Tài liệu <strong id="cancelUploadDocumentName"></strong> sẽ được đánh dấu là đã hủy tải lên. File và dữ liệu liên quan vẫn được giữ lại để truy vết.</p>
+                        <label for="cancellationReason" class="form-label">Lý do hủy tài liệu tải nhầm</label>
+                        <textarea id="cancellationReason"
+                                  name="cancellationReason"
+                                  class="form-control"
+                                  rows="4"
+                                  maxlength="1000"
+                                  required
+                                  placeholder="Nhập lý do hủy, ví dụ: tải nhầm phiên bản hoặc sai môn học."></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-x-circle"></i> Hủy tài liệu tải nhầm
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
     <script>
         document.addEventListener('click', function (event) {
-            const trigger = event.target.closest('.js-document-archive-trigger');
-            if (!trigger) {
+            const archiveTrigger = event.target.closest('.js-document-archive-trigger');
+            if (archiveTrigger) {
+                const documentId = archiveTrigger.dataset.documentId;
+                const form = document.getElementById('archiveDocumentForm');
+                form.action = `/Document/Details/${documentId}?handler=Archive`;
+                document.getElementById('archiveDocumentName').textContent = archiveTrigger.dataset.documentName || '';
+                document.getElementById('archiveReason').value = '';
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('archiveDocumentModal')).show();
                 return;
             }
 
-            const documentId = trigger.dataset.documentId;
-            const form = document.getElementById('archiveDocumentForm');
-            form.action = `/Document/Details/${documentId}?handler=Archive`;
-            document.getElementById('archiveDocumentName').textContent = trigger.dataset.documentName || '';
-            document.getElementById('archiveReason').value = '';
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('archiveDocumentModal')).show();
+            const cancelTrigger = event.target.closest('.js-document-cancel-trigger');
+            if (cancelTrigger) {
+                const documentId = cancelTrigger.dataset.documentId;
+                const form = document.getElementById('cancelUploadForm');
+                form.action = `/Document/Details/${documentId}?handler=CancelUpload`;
+                document.getElementById('cancelUploadDocumentName').textContent = cancelTrigger.dataset.documentName || '';
+                document.getElementById('cancellationReason').value = '';
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('cancelUploadModal')).show();
+            }
         });
     </script>
 }

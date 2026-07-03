@@ -31,6 +31,8 @@ public class DocumentService : IDocumentService
     private readonly IRepository<ChatCitation>? _chatCitationRepository;
     private readonly IQAPairRepository? _qaPairRepository;
     private readonly IDocumentRealtimeNotifier? _realtimeNotifier;
+    private readonly IRepository<Course>? _courseRepository;
+    private readonly ICourseAccessService? _courseAccessService;
     private readonly int _chunkSize;
     private readonly int _chunkOverlap;
     private readonly TimeSpan _processingRetryAfter;
@@ -49,7 +51,9 @@ public class DocumentService : IDocumentService
         IRepository<ChatCitation>? chatCitationRepository = null,
         IQAPairRepository? qaPairRepository = null,
         IDocumentRealtimeNotifier? realtimeNotifier = null,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        IRepository<Course>? courseRepository = null,
+        ICourseAccessService? courseAccessService = null)
     {
         _documentRepository = documentRepository;
         _chunkRepository = chunkRepository;
@@ -64,6 +68,8 @@ public class DocumentService : IDocumentService
         _chatCitationRepository = chatCitationRepository;
         _qaPairRepository = qaPairRepository;
         _realtimeNotifier = realtimeNotifier;
+        _courseRepository = courseRepository;
+        _courseAccessService = courseAccessService;
         _chunkSize = GetIntSetting(configuration, "Chunking:DefaultChunkSize", 512);
         _chunkOverlap = GetIntSetting(configuration, "Chunking:DefaultOverlap", 50);
         _processingRetryAfter = TimeSpan.FromMinutes(
@@ -72,8 +78,11 @@ public class DocumentService : IDocumentService
 
     public async Task<IEnumerable<DocumentDto>> GetAllDocumentsAsync()
     {
-        var documents = await _documentRepository.GetAllAsync();
-        return documents.Select(MapToDto);
+        var query = _documentRepository.GetQueryable()
+            .AsNoTracking()
+            .OrderByDescending(document => document.CreatedAt);
+
+        return await ProjectDocumentList(query).ToListAsync();
     }
 
     public async Task<DocumentDashboardSummaryDto> GetDashboardSummaryAsync(IEnumerable<int>? courseIds = null)
@@ -112,7 +121,10 @@ public class DocumentService : IDocumentService
                 document.Status.ToString(),
                 document.Course.Name,
                 document.CourseId,
-                document.CreatedAt))
+                document.CreatedAt,
+                document.UploadedByUser != null ? document.UploadedByUser.Email : null,
+                document.UploadedAt,
+                document.UploadedByUserId))
             .ToListAsync();
 
         return new DocumentDashboardSummaryDto(
@@ -155,12 +167,19 @@ public class DocumentService : IDocumentService
             ErrorMessage = document.ErrorMessage,
             CourseName = document.Course.Name,
             CourseId = document.CourseId,
+            DepartmentName = document.Course.Department?.Name,
             CreatedAt = document.CreatedAt,
             UpdatedAt = document.UpdatedAt,
+            UploadedByUserId = document.UploadedByUserId,
+            UploadedByEmail = document.UploadedByUser?.Email,
+            UploadedAt = document.UploadedAt,
             ArchivedByEmail = document.ArchivedByUser?.Email,
             ArchivedAt = document.ArchivedAt,
             ArchiveReason = document.ArchiveReason,
             ArchivedFromStatus = document.ArchivedFromStatus?.ToString(),
+            CancelledByEmail = document.CancelledByUser?.Email,
+            CancelledAt = document.CancelledAt,
+            CancellationReason = document.CancellationReason,
             ExtractedTextPreview = document.ExtractedText?.Length > 2000
                 ? document.ExtractedText[..2000] + "..."
                 : document.ExtractedText,
@@ -173,8 +192,12 @@ public class DocumentService : IDocumentService
 
     public async Task<IEnumerable<DocumentDto>> GetDocumentsByCourseAsync(int courseId)
     {
-        var documents = await _documentRepository.GetByCourseIdAsync(courseId);
-        return documents.Select(MapToDto);
+        var query = _documentRepository.GetQueryable()
+            .AsNoTracking()
+            .Where(document => document.CourseId == courseId)
+            .OrderByDescending(document => document.CreatedAt);
+
+        return await ProjectDocumentList(query).ToListAsync();
     }
 
     public async Task<DocumentImageDto?> GetChunkImageAsync(int chunkId)
@@ -202,6 +225,37 @@ public class DocumentService : IDocumentService
 
     public async Task<DocumentDto> UploadDocumentAsync(DocumentUploadDto dto, Stream fileStream)
     {
+        if (string.IsNullOrWhiteSpace(dto.UploadedByUserId))
+        {
+            throw new InvalidOperationException("Không xác định được tài khoản tải tài liệu.");
+        }
+
+        if (dto.CourseId <= 0)
+        {
+            throw new ArgumentException("Môn học không hợp lệ.", nameof(dto.CourseId));
+        }
+
+        if (_courseRepository is not null &&
+            !await _courseRepository.GetQueryable()
+                .AsNoTracking()
+                .AnyAsync(course => course.Id == dto.CourseId))
+        {
+            throw new InvalidOperationException("Môn học không tồn tại.");
+        }
+
+        if (_courseAccessService is null)
+        {
+            throw new InvalidOperationException("Dịch vụ kiểm tra phạm vi môn học chưa được cấu hình.");
+        }
+
+        if (!await _courseAccessService.CanStaffAccessCourseAsync(
+                dto.UploadedByUserId,
+                dto.CourseId))
+        {
+            throw new UnauthorizedAccessException(
+                "Bạn không được phân công quản lý môn học đã chọn.");
+        }
+
         // Validate file type
         if (!_extractorFactory.IsSupported(dto.ContentType))
         {
@@ -224,37 +278,53 @@ public class DocumentService : IDocumentService
         var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "uploads");
         Directory.CreateDirectory(uploadsDir);
         var storagePath = Path.Combine(uploadsDir, storedFileName);
+        var persisted = false;
 
-        // Save file to disk
-        using (var fileStreamOutput = new FileStream(storagePath, FileMode.Create))
+        try
         {
-            await fileStream.CopyToAsync(fileStreamOutput);
+            // Save file to disk
+            using (var fileStreamOutput = new FileStream(storagePath, FileMode.Create))
+            {
+                await fileStream.CopyToAsync(fileStreamOutput);
+            }
+
+            var uploadedAt = DateTime.UtcNow;
+            var document = new Document
+            {
+                CourseId = dto.CourseId,
+                FileName = storedFileName,
+                OriginalFileName = dto.OriginalFileName,
+                ContentType = dto.ContentType,
+                FileSize = dto.FileSize,
+                StoragePath = storagePath,
+                ChunkingStrategy = "FixedSize",
+                Status = DocumentStatus.Uploaded,
+                CreatedAt = uploadedAt,
+                UploadedByUserId = dto.UploadedByUserId,
+                UploadedAt = uploadedAt
+            };
+
+            await _documentRepository.AddAsync(document);
+            await _unitOfWork.SaveChangesAsync();
+            persisted = true;
+
+            _logger.LogInformation("Document uploaded: {FileName} (ID: {DocumentId})",
+                document.OriginalFileName, document.Id);
+
+            // Load course for DTO mapping
+            var savedDoc = await _documentRepository.GetWithCourseAsync(document.Id);
+            await NotifyDocumentChangedAsync(savedDoc!, "uploaded");
+            return MapToDto(savedDoc!);
         }
-
-        // Create document entity
-        var document = new Document
+        catch
         {
-            CourseId = dto.CourseId,
-            FileName = storedFileName,
-            OriginalFileName = dto.OriginalFileName,
-            ContentType = dto.ContentType,
-            FileSize = dto.FileSize,
-            StoragePath = storagePath,
-            ChunkingStrategy = "FixedSize",
-            Status = DocumentStatus.Uploaded,
-            CreatedAt = DateTime.UtcNow
-        };
+            if (!persisted && File.Exists(storagePath))
+            {
+                File.Delete(storagePath);
+            }
 
-        await _documentRepository.AddAsync(document);
-        await _unitOfWork.SaveChangesAsync();
-
-        _logger.LogInformation("Document uploaded: {FileName} (ID: {DocumentId})",
-            document.OriginalFileName, document.Id);
-
-        // Load course for DTO mapping
-        var savedDoc = await _documentRepository.GetWithCourseAsync(document.Id);
-        await NotifyDocumentChangedAsync(savedDoc!, "uploaded");
-        return MapToDto(savedDoc!);
+            throw;
+        }
     }
 
     public async Task ProcessDocumentAsync(int documentId)
@@ -268,12 +338,34 @@ public class DocumentService : IDocumentService
         {
             throw new InvalidOperationException("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
         }
+        if (document.Status == DocumentStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Tài liệu đã bị hủy tải lên nên không thể xử lý.");
+        }
+
+        if (document.Status == DocumentStatus.Uploaded)
+        {
+            var processingStartedAt = DateTime.UtcNow;
+            var started = await _documentRepository.TryStartUploadedProcessingAsync(
+                documentId,
+                processingStartedAt);
+            if (!started)
+            {
+                throw new InvalidOperationException(
+                    "Tài liệu đã bị hủy tải lên hoặc trạng thái đã thay đổi nên không thể xử lý.");
+            }
+
+            document.Status = DocumentStatus.Processing;
+            document.UpdatedAt = processingStartedAt;
+        }
 
         try
         {
-            // Update status to Processing
-            await _documentRepository.UpdateStatusAsync(documentId, DocumentStatus.Processing);
-            await _unitOfWork.SaveChangesAsync();
+            if (document.Status != DocumentStatus.Processing)
+            {
+                await _documentRepository.UpdateStatusAsync(documentId, DocumentStatus.Processing);
+                await _unitOfWork.SaveChangesAsync();
+            }
             await NotifyDocumentChangedAsync(document, "processing", DocumentStatus.Processing);
 
             _logger.LogInformation("Processing document: {FileName} (ID: {DocumentId})",
@@ -437,6 +529,10 @@ public class DocumentService : IDocumentService
         {
             throw new InvalidOperationException("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
         }
+        if (document.Status == DocumentStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Tài liệu đã bị hủy tải lên nên không thể xử lý.");
+        }
 
         // Concurrency Guard: If the document is already in Processing status, do not enqueue again.
         // A stale Processing status can happen after an app restart or worker crash, so allow retry
@@ -455,9 +551,25 @@ public class DocumentService : IDocumentService
                 document.UpdatedAt);
         }
 
-        // 1. Update status to Processing synchronously so DB is immediately updated
-        await _documentRepository.UpdateStatusAsync(documentId, DocumentStatus.Processing, null);
-        await _unitOfWork.SaveChangesAsync();
+        // Claim Uploaded atomically so cancellation and processing cannot overwrite each other.
+        if (document.Status == DocumentStatus.Uploaded)
+        {
+            var started = await _documentRepository.TryStartUploadedProcessingAsync(
+                documentId,
+                DateTime.UtcNow);
+            if (!started)
+            {
+                throw new InvalidOperationException(
+                    "Tài liệu đã bị hủy tải lên hoặc trạng thái đã thay đổi nên không thể xử lý.");
+            }
+            document.Status = DocumentStatus.Processing;
+            document.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            await _documentRepository.UpdateStatusAsync(documentId, DocumentStatus.Processing, null);
+            await _unitOfWork.SaveChangesAsync();
+        }
 
         // 2. If scope factory is not present (e.g. in simple unit tests), fallback to sync execution
         if (_scopeFactory == null)
@@ -545,6 +657,11 @@ public class DocumentService : IDocumentService
             throw new InvalidOperationException("Không thể tạm ẩn tài liệu khi hệ thống đang xử lý.");
         }
 
+        if (document.Status == DocumentStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Tài liệu đã bị hủy tải lên nên không thể tạm ẩn khỏi RAG.");
+        }
+
         var archivedAt = DateTime.UtcNow;
         document.ArchivedFromStatus = document.Status;
         document.ArchivedByUserId = archivedByUserId;
@@ -558,6 +675,76 @@ public class DocumentService : IDocumentService
 
         _logger.LogInformation("Document archived from RAG: {FileName} (ID: {DocumentId})",
             document.OriginalFileName, id);
+    }
+
+    public async Task CancelMistakenUploadAsync(
+        int documentId,
+        string currentUserId,
+        string cancellationReason)
+    {
+        if (string.IsNullOrWhiteSpace(currentUserId))
+        {
+            throw new InvalidOperationException(
+                "Không xác định được tài khoản thực hiện hủy tải lên.");
+        }
+
+        if (string.IsNullOrWhiteSpace(cancellationReason))
+        {
+            throw new ArgumentException(
+                "Lý do hủy tải lên là bắt buộc.",
+                nameof(cancellationReason));
+        }
+
+        var normalizedReason = cancellationReason.Trim();
+        if (normalizedReason.Length > 1000)
+        {
+            throw new ArgumentException(
+                "Lý do hủy tải lên không được vượt quá 1000 ký tự.",
+                nameof(cancellationReason));
+        }
+
+        var document = await _documentRepository.GetWithCourseAsync(documentId);
+        if (document == null)
+        {
+            throw new InvalidOperationException($"Document with ID {documentId} not found.");
+        }
+
+        if (!string.Equals(document.UploadedByUserId, currentUserId, StringComparison.Ordinal))
+        {
+            throw new UnauthorizedAccessException("Bạn không có quyền hủy tài liệu này.");
+        }
+
+        if (_courseAccessService is null ||
+            !await _courseAccessService.CanStaffAccessCourseAsync(currentUserId, document.CourseId))
+        {
+            throw new UnauthorizedAccessException(
+                "Bạn không được phân công quản lý môn học của tài liệu này.");
+        }
+
+        if (document.Status != DocumentStatus.Uploaded)
+        {
+            throw new InvalidOperationException(
+                "Không thể hủy vì tài liệu đã bắt đầu xử lý hoặc không còn ở trạng thái chờ.");
+        }
+
+        var cancelledAt = DateTime.UtcNow;
+        var cancelled = await _documentRepository.TryCancelUploadedAsync(
+            documentId,
+            currentUserId,
+            cancelledAt,
+            normalizedReason);
+        if (!cancelled)
+        {
+            throw new InvalidOperationException(
+                "Tài liệu đã bắt đầu xử lý hoặc trạng thái đã thay đổi nên không thể hủy tải lên.");
+        }
+
+        document.Status = DocumentStatus.Cancelled;
+        document.CancelledByUserId = currentUserId;
+        document.CancelledAt = cancelledAt;
+        document.CancellationReason = normalizedReason;
+        document.UpdatedAt = cancelledAt;
+        await NotifyDocumentChangedAsync(document, "cancelled", DocumentStatus.Cancelled);
     }
 
 
@@ -605,8 +792,29 @@ public class DocumentService : IDocumentService
             Status: doc.Status.ToString(),
             CourseName: doc.Course?.Name ?? "Unknown",
             CourseId: doc.CourseId,
-            CreatedAt: doc.CreatedAt
+            CreatedAt: doc.CreatedAt,
+            UploadedByEmail: doc.UploadedByUser?.Email,
+            UploadedAt: doc.UploadedAt,
+            UploadedByUserId: doc.UploadedByUserId
         );
+    }
+
+    private static IQueryable<DocumentDto> ProjectDocumentList(IQueryable<Document> query)
+    {
+        return query.Select(document => new DocumentDto(
+            document.Id,
+            document.FileName,
+            document.OriginalFileName,
+            document.ContentType,
+            document.FileSize,
+            document.ChunkCount,
+            document.Status.ToString(),
+            document.Course.Name,
+            document.CourseId,
+            document.CreatedAt,
+            document.UploadedByUser != null ? document.UploadedByUser.Email : null,
+            document.UploadedAt,
+            document.UploadedByUserId));
     }
 
     private void DeleteChunkDependents(IEnumerable<int> chunkIds)

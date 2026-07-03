@@ -23,11 +23,27 @@ public class UploadModel(
         Courses = (await GetVisibleCoursesAsync()).ToList();
     }
 
-    public async Task<IActionResult> OnPostAsync(IFormFile? file, int courseId)
+    public async Task<IActionResult> OnPostAsync(
+        IFormFile? file,
+        int courseId,
+        bool acceptsResponsibility)
     {
+        var uploadedByUserId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(uploadedByUserId))
+        {
+            return Forbid();
+        }
+
         if (!await CanAccessCourseAsync(courseId))
         {
             return Forbid();
+        }
+
+        if (!acceptsResponsibility)
+        {
+            TempData["Error"] = "Bạn phải xác nhận trách nhiệm về nguồn và nội dung tài liệu trước khi tải lên.";
+            Courses = (await GetVisibleCoursesAsync()).ToList();
+            return Page();
         }
 
         if (file == null || file.Length == 0)
@@ -53,7 +69,8 @@ public class UploadModel(
                 CourseId = courseId,
                 OriginalFileName = file.FileName,
                 ContentType = file.ContentType,
-                FileSize = file.Length
+                FileSize = file.Length,
+                UploadedByUserId = uploadedByUserId
             };
 
             using var stream = file.OpenReadStream();
@@ -61,6 +78,11 @@ public class UploadModel(
 
             TempData["Success"] = $"File '{file.FileName}' da duoc upload thanh cong.";
             return Redirect($"/Document/Details/{document.Id}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogWarning(ex, "Rejected out-of-scope upload for course {CourseId}", courseId);
+            return Forbid();
         }
         catch (Exception ex)
         {
@@ -71,14 +93,9 @@ public class UploadModel(
         }
     }
 
-    private bool CanSeeAllCourses() =>
-        User?.Identity?.IsAuthenticated == true &&
-        User.IsInRole(ApplicationRoles.Admin);
-
     private bool IsCourseScopedUser() =>
         User?.Identity?.IsAuthenticated == true &&
-        !CanSeeAllCourses() &&
-        (User.IsInRole(ApplicationRoles.HeadLecturer) || User.IsInRole(ApplicationRoles.Lecturer));
+        User.IsInRole(ApplicationRoles.HeadLecturer);
 
     private string? CurrentUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -104,7 +121,7 @@ public class UploadModel(
     {
         if (!IsCourseScopedUser())
         {
-            return true;
+            return false;
         }
 
         var userId = CurrentUserId();

@@ -32,7 +32,7 @@ public class EffectiveCourseScopePageTests
             PageContext = CreatePageContext("head-1", ApplicationRoles.HeadLecturer)
         };
 
-        var result = await page.OnPostAsync(Mock.Of<IFormFile>(), 20);
+        var result = await page.OnPostAsync(Mock.Of<IFormFile>(), 20, true);
 
         result.Should().BeOfType<ForbidResult>();
         documentService.Verify(service => service.UploadDocumentAsync(It.IsAny<DocumentUploadDto>(), It.IsAny<Stream>()), Times.Never);

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PRN222.DAL.Data;
 
@@ -11,9 +12,11 @@ using PRN222.DAL.Data;
 namespace PRN222.DAL.Migrations
 {
     [DbContext(typeof(ChatbotDbContext))]
-    partial class ChatbotDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260703074015_AddDocumentUploadAccountability")]
+    partial class AddDocumentUploadAccountability
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -571,17 +574,6 @@ namespace PRN222.DAL.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<string>("CancellationReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CancelledByUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("nvarchar(450)");
-
                     b.Property<int>("ChunkCount")
                         .HasColumnType("int");
 
@@ -646,8 +638,6 @@ namespace PRN222.DAL.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ArchivedByUserId");
-
-                    b.HasIndex("CancelledByUserId");
 
                     b.HasIndex("CourseId");
 
@@ -1030,11 +1020,6 @@ namespace PRN222.DAL.Migrations
                         .HasForeignKey("ArchivedByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("PRN222.DAL.Entities.ApplicationUser", "CancelledByUser")
-                        .WithMany()
-                        .HasForeignKey("CancelledByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("PRN222.DAL.Entities.Course", "Course")
                         .WithMany("Documents")
                         .HasForeignKey("CourseId")
@@ -1052,8 +1037,6 @@ namespace PRN222.DAL.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("ArchivedByUser");
-
-                    b.Navigation("CancelledByUser");
 
                     b.Navigation("Course");
 

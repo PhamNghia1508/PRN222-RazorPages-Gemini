@@ -96,7 +96,8 @@ public class RagRetrievalServiceTests
             {
                 new Document { Id = 1, OriginalFileName = "indexed.pdf", Status = DocumentStatus.Indexed },
                 new Document { Id = 2, OriginalFileName = "uploaded.pdf", Status = DocumentStatus.Uploaded },
-                new Document { Id = 3, OriginalFileName = "archived.pdf", Status = DocumentStatus.Archived }
+                new Document { Id = 3, OriginalFileName = "archived.pdf", Status = DocumentStatus.Archived },
+                new Document { Id = 4, OriginalFileName = "cancelled.pdf", Status = DocumentStatus.Cancelled }
             });
 
         _chunkRepositoryMock.Setup(r => r.GetChunksWithEmbeddingsByDocumentIdsAsync(

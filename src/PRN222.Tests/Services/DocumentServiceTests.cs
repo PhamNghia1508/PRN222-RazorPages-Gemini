@@ -25,6 +25,7 @@ public class DocumentServiceTests
     private readonly Mock<IGeminiVisionService> _visionServiceMock;
     private readonly Mock<ILogger<DocumentService>> _loggerMock;
     private readonly Mock<IDocumentRealtimeNotifier> _realtimeNotifierMock;
+    private readonly Mock<ICourseAccessService> _courseAccessServiceMock;
     private readonly TextExtractorFactory _extractorFactory;
     private readonly DocumentService _documentService;
 
@@ -39,6 +40,7 @@ public class DocumentServiceTests
         _visionServiceMock = new Mock<IGeminiVisionService>();
         _loggerMock = new Mock<ILogger<DocumentService>>();
         _realtimeNotifierMock = new Mock<IDocumentRealtimeNotifier>();
+        _courseAccessServiceMock = new Mock<ICourseAccessService>();
 
         // Setup Extractor Factory with the mocked extractor
         _extractorMock.Setup(e => e.CanHandle(It.IsAny<string>())).Returns(true);
@@ -47,6 +49,21 @@ public class DocumentServiceTests
         _embeddingServiceMock.Setup(e => e.ModelName).Returns("test-model");
         _embeddingServiceMock.Setup(e => e.GenerateEmbeddingAsync(It.IsAny<string>()))
             .ReturnsAsync(new float[] { 0.1f, 0.2f });
+        _courseAccessServiceMock
+            .Setup(service => service.CanStaffAccessCourseAsync(It.IsAny<string>(), It.IsAny<int>()))
+            .ReturnsAsync(true);
+        _documentRepoMock
+            .Setup(repository => repository.TryStartUploadedProcessingAsync(
+                It.IsAny<int>(),
+                It.IsAny<DateTime>()))
+            .ReturnsAsync(true);
+        _documentRepoMock
+            .Setup(repository => repository.TryCancelUploadedAsync(
+                It.IsAny<int>(),
+                It.IsAny<string>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<string>()))
+            .ReturnsAsync(true);
 
         _documentService = new DocumentService(
             _documentRepoMock.Object,
@@ -57,7 +74,8 @@ public class DocumentServiceTests
             _embeddingServiceMock.Object,
             _visionServiceMock.Object,
             _loggerMock.Object,
-            realtimeNotifier: _realtimeNotifierMock.Object
+            realtimeNotifier: _realtimeNotifierMock.Object,
+            courseAccessService: _courseAccessServiceMock.Object
         );
     }
 
@@ -77,7 +95,8 @@ public class DocumentServiceTests
             _chunkingServiceMock.Object,
             _embeddingServiceMock.Object,
             _visionServiceMock.Object,
-            _loggerMock.Object
+            _loggerMock.Object,
+            courseAccessService: _courseAccessServiceMock.Object
         );
 
         var dto = new DocumentUploadDto
@@ -85,7 +104,8 @@ public class DocumentServiceTests
             CourseId = 1,
             OriginalFileName = "test.pdf",
             ContentType = "application/pdf",
-            FileSize = 100
+            FileSize = 100,
+            UploadedByUserId = "head-user-id"
         };
         using var stream = new MemoryStream();
 
@@ -103,7 +123,8 @@ public class DocumentServiceTests
             CourseId = 1,
             OriginalFileName = "fake.pdf",
             ContentType = "application/pdf",
-            FileSize = 10
+            FileSize = 10,
+            UploadedByUserId = "head-user-id"
         };
         // Write invalid PDF bytes
         byte[] invalidBytes = System.Text.Encoding.UTF8.GetBytes("NOT_A_PDF_FILE");
@@ -125,7 +146,8 @@ public class DocumentServiceTests
             CourseId = 1,
             OriginalFileName = "real.pdf",
             ContentType = "application/pdf",
-            FileSize = 10
+            FileSize = 10,
+            UploadedByUserId = "head-user-id"
         };
         // Write valid PDF magic number
         byte[] pdfBytes = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x31, 0x2E, 0x34 }; // %PDF1.4
@@ -180,6 +202,268 @@ public class DocumentServiceTests
     }
 
     [Fact]
+    public async Task CancelMistakenUploadAsync_ShouldPersistTrimmedAuditWithoutDeletingData()
+    {
+        var uploadedAt = new DateTime(2026, 7, 3, 7, 0, 0, DateTimeKind.Utc);
+        var document = new Document
+        {
+            Id = 91,
+            CourseId = 6,
+            Status = DocumentStatus.Uploaded,
+            UploadedByUserId = "head-1",
+            UploadedAt = uploadedAt,
+            StoragePath = "kept.pdf",
+            ArchivedByUserId = "archive-actor",
+            ArchiveReason = "existing archive metadata"
+        };
+        _documentRepoMock.Setup(repository => repository.GetWithCourseAsync(91))
+            .ReturnsAsync(document);
+
+        await _documentService.CancelMistakenUploadAsync(91, "head-1", "  tải nhầm phiên bản  ");
+
+        _documentRepoMock.Verify(repository => repository.TryCancelUploadedAsync(
+            91,
+            "head-1",
+            It.Is<DateTime>(value => value.Kind == DateTimeKind.Utc),
+            "tải nhầm phiên bản"), Times.Once);
+        _unitOfWorkMock.Verify(unit => unit.SaveChangesAsync(), Times.Never);
+        _documentRepoMock.Verify(repository => repository.Delete(It.IsAny<Document>()), Times.Never);
+        document.UploadedByUserId.Should().Be("head-1");
+        document.UploadedAt.Should().Be(uploadedAt);
+        document.ArchivedByUserId.Should().Be("archive-actor");
+        document.ArchiveReason.Should().Be("existing archive metadata");
+        document.Status.Should().Be(DocumentStatus.Cancelled);
+        document.CancelledByUserId.Should().Be("head-1");
+        document.CancellationReason.Should().Be("tải nhầm phiên bản");
+        document.CancelledAt.Should().NotBeNull();
+        document.CancelledAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CancelMistakenUploadAsync_ShouldRejectMissingReason(string? reason)
+    {
+        var action = () => _documentService.CancelMistakenUploadAsync(91, "head-1", reason!);
+
+        await action.Should().ThrowAsync<ArgumentException>();
+        _documentRepoMock.Verify(repository => repository.TryCancelUploadedAsync(
+            It.IsAny<int>(), It.IsAny<string>(), It.IsAny<DateTime>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CancelMistakenUploadAsync_ShouldRejectReasonOverMaximumLength()
+    {
+        var action = () => _documentService.CancelMistakenUploadAsync(
+            91,
+            "head-1",
+            new string('a', 1001));
+
+        await action.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task CancelMistakenUploadAsync_ShouldRejectDifferentUploader()
+    {
+        _documentRepoMock.Setup(repository => repository.GetWithCourseAsync(91))
+            .ReturnsAsync(new Document
+            {
+                Id = 91,
+                CourseId = 6,
+                Status = DocumentStatus.Uploaded,
+                UploadedByUserId = "head-2"
+            });
+
+        var action = () => _documentService.CancelMistakenUploadAsync(
+            91,
+            "head-1",
+            "tải nhầm");
+
+        await action.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task CancelMistakenUploadAsync_ShouldRejectCourseOutsideEffectiveScope()
+    {
+        _documentRepoMock.Setup(repository => repository.GetWithCourseAsync(91))
+            .ReturnsAsync(new Document
+            {
+                Id = 91,
+                CourseId = 20,
+                Status = DocumentStatus.Uploaded,
+                UploadedByUserId = "head-1"
+            });
+        _courseAccessServiceMock
+            .Setup(service => service.CanStaffAccessCourseAsync("head-1", 20))
+            .ReturnsAsync(false);
+
+        var action = () => _documentService.CancelMistakenUploadAsync(
+            91,
+            "head-1",
+            "tải nhầm");
+
+        await action.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Theory]
+    [InlineData(DocumentStatus.Processing)]
+    [InlineData(DocumentStatus.Indexed)]
+    [InlineData(DocumentStatus.Failed)]
+    [InlineData(DocumentStatus.Archived)]
+    [InlineData(DocumentStatus.Cancelled)]
+    public async Task CancelMistakenUploadAsync_ShouldRejectEveryStatusExceptUploaded(
+        DocumentStatus status)
+    {
+        _documentRepoMock.Setup(repository => repository.GetWithCourseAsync(91))
+            .ReturnsAsync(new Document
+            {
+                Id = 91,
+                CourseId = 6,
+                Status = status,
+                UploadedByUserId = "head-1"
+            });
+
+        var action = () => _documentService.CancelMistakenUploadAsync(
+            91,
+            "head-1",
+            "tải nhầm");
+
+        await action.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task CancelMistakenUploadAsync_WhenProcessingWinsAtomicTransition_ShouldFail()
+    {
+        _documentRepoMock.Setup(repository => repository.GetWithCourseAsync(91))
+            .ReturnsAsync(new Document
+            {
+                Id = 91,
+                CourseId = 6,
+                Status = DocumentStatus.Uploaded,
+                UploadedByUserId = "head-1"
+            });
+        _documentRepoMock.Setup(repository => repository.TryCancelUploadedAsync(
+                91, "head-1", It.IsAny<DateTime>(), It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        var action = () => _documentService.CancelMistakenUploadAsync(
+            91,
+            "head-1",
+            "tải nhầm");
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*trạng thái đã thay đổi*");
+    }
+
+    [Fact]
+    public async Task EnqueueProcessDocumentAsync_WhenCancellationWinsAtomicTransition_ShouldNotQueue()
+    {
+        _documentRepoMock.Setup(repository => repository.GetByIdAsync(91))
+            .ReturnsAsync(new Document { Id = 91, Status = DocumentStatus.Uploaded });
+        _documentRepoMock.Setup(repository => repository.TryStartUploadedProcessingAsync(
+                91, It.IsAny<DateTime>()))
+            .ReturnsAsync(false);
+
+        var action = () => _documentService.EnqueueProcessDocumentAsync(91);
+
+        await action.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*trạng thái đã thay đổi*");
+        _unitOfWorkMock.Verify(unit => unit.SaveChangesAsync(), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UploadDocumentAsync_ShouldRejectMissingActor(string? actorUserId)
+    {
+        var dto = new DocumentUploadDto
+        {
+            CourseId = 1,
+            OriginalFileName = "real.pdf",
+            ContentType = "application/pdf",
+            FileSize = 4,
+            UploadedByUserId = actorUserId!
+        };
+        using var stream = new MemoryStream([0x25, 0x50, 0x44, 0x46]);
+
+        var act = () => _documentService.UploadDocumentAsync(dto, stream);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Không xác định được tài khoản tải tài liệu.");
+        _documentRepoMock.Verify(repository => repository.AddAsync(It.IsAny<Document>()), Times.Never);
+        _unitOfWorkMock.Verify(unitOfWork => unitOfWork.SaveChangesAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task UploadDocumentAsync_ShouldRejectCourseOutsideActorScopeBeforeSavingFile()
+    {
+        _courseAccessServiceMock
+            .Setup(service => service.CanStaffAccessCourseAsync("head-user-id", 99))
+            .ReturnsAsync(false);
+        var dto = new DocumentUploadDto
+        {
+            CourseId = 99,
+            OriginalFileName = "forged.pdf",
+            ContentType = "application/pdf",
+            FileSize = 4,
+            UploadedByUserId = "head-user-id"
+        };
+        using var stream = new MemoryStream([0x25, 0x50, 0x44, 0x46]);
+
+        var act = () => _documentService.UploadDocumentAsync(dto, stream);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>()
+            .WithMessage("Bạn không được phân công quản lý môn học đã chọn.");
+        _documentRepoMock.Verify(repository => repository.AddAsync(It.IsAny<Document>()), Times.Never);
+        _unitOfWorkMock.Verify(unitOfWork => unitOfWork.SaveChangesAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task UploadDocumentAsync_ShouldStoreAuthenticatedActorAndUtcTimestamp()
+    {
+        Document? capturedDocument = null;
+        _documentRepoMock
+            .Setup(repository => repository.AddAsync(It.IsAny<Document>()))
+            .Callback<Document>(document =>
+            {
+                capturedDocument = document;
+                document.Id = 500;
+                document.Course = new Course { Id = 1, Name = "PRN222" };
+            })
+            .Returns(Task.CompletedTask);
+        _documentRepoMock
+            .Setup(repository => repository.GetWithCourseAsync(500))
+            .ReturnsAsync(() => capturedDocument);
+
+        var dto = new DocumentUploadDto
+        {
+            CourseId = 1,
+            OriginalFileName = "accountable.pdf",
+            ContentType = "application/pdf",
+            FileSize = 4,
+            UploadedByUserId = "head-user-id"
+        };
+        using var stream = new MemoryStream([0x25, 0x50, 0x44, 0x46]);
+        var beforeUpload = DateTime.UtcNow;
+
+        await _documentService.UploadDocumentAsync(dto, stream);
+
+        capturedDocument.Should().NotBeNull();
+        capturedDocument!.UploadedByUserId.Should().Be("head-user-id");
+        capturedDocument.UploadedAt.Should().BeOnOrAfter(beforeUpload);
+        capturedDocument.UploadedAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
+        capturedDocument.CreatedAt.Should().Be(capturedDocument.UploadedAt.Value);
+        _unitOfWorkMock.Verify(unitOfWork => unitOfWork.SaveChangesAsync(), Times.Once);
+
+        if (File.Exists(capturedDocument.StoragePath))
+        {
+            File.Delete(capturedDocument.StoragePath);
+        }
+    }
+
+    [Fact]
     public async Task ProcessDocumentAsync_ShouldThrowInvalidOperationException_WhenDocumentNotFound()
     {
         // Arrange
@@ -231,7 +515,8 @@ public class DocumentServiceTests
             await _documentService.ProcessDocumentAsync(docId);
 
             // Assert
-            _documentRepoMock.Verify(r => r.UpdateStatusAsync(docId, DocumentStatus.Processing, null), Times.Once);
+            _documentRepoMock.Verify(r => r.TryStartUploadedProcessingAsync(
+                docId, It.IsAny<DateTime>()), Times.Once);
             _chunkRepoMock.Verify(r => r.DeleteByDocumentIdAsync(docId), Times.Once);
             _chunkRepoMock.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<DocumentChunk>>(chunks => chunks.Count() == 2)), Times.Once);
 
@@ -241,7 +526,7 @@ public class DocumentServiceTests
 
             _unitOfWorkMock.Verify(u => u.BeginTransactionAsync(), Times.Once);
             _unitOfWorkMock.Verify(u => u.CommitTransactionAsync(), Times.Once);
-            _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Exactly(2)); // Once for processing, once for indexing
+            _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Once);
             _realtimeNotifierMock.Verify(n => n.NotifyDocumentChangedAsync(
                 It.Is<DocumentRealtimeNotification>(notification =>
                     notification.DocumentId == docId &&
@@ -414,7 +699,9 @@ public class DocumentServiceTests
                 OriginalFileName = "reprocess.pdf",
                 ContentType = "application/pdf",
                 StoragePath = tempFilePath,
-                Status = DocumentStatus.Indexed
+                Status = DocumentStatus.Indexed,
+                UploadedByUserId = "head-user-id",
+                UploadedAt = new DateTime(2026, 7, 3, 2, 30, 0, DateTimeKind.Utc)
             };
 
             var existingChunks = new List<DocumentChunk>
@@ -541,11 +828,12 @@ public class DocumentServiceTests
             await act.Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("Lỗi đọc file PDF rồi!");
 
-            _documentRepoMock.Verify(r => r.UpdateStatusAsync(docId, DocumentStatus.Processing, null), Times.Once);
+            _documentRepoMock.Verify(r => r.TryStartUploadedProcessingAsync(
+                docId, It.IsAny<DateTime>()), Times.Once);
             _documentRepoMock.Verify(r => r.UpdateStatusAsync(docId, DocumentStatus.Failed, "Lỗi đọc file PDF rồi!"), Times.Once);
             _unitOfWorkMock.Verify(u => u.BeginTransactionAsync(), Times.Never); // Fails before transaction starts
             _unitOfWorkMock.Verify(u => u.CommitTransactionAsync(), Times.Never);
-            _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Exactly(2)); // Once for Processing status, once for Failed status
+            _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Once);
             _realtimeNotifierMock.Verify(n => n.NotifyDocumentChangedAsync(
                 It.Is<DocumentRealtimeNotification>(notification =>
                     notification.DocumentId == docId &&
@@ -600,9 +888,9 @@ public class DocumentServiceTests
                 .WithMessage("Stop here");
 
             // Verify status was changed to Processing and then Failed
-            _documentRepoMock.Verify(r => r.UpdateStatusAsync(docId, DocumentStatus.Processing, null), Times.Exactly(2)); // Once in Enqueue, once in Process
+            _documentRepoMock.Verify(r => r.TryStartUploadedProcessingAsync(docId, It.IsAny<DateTime>()), Times.Once);
             _documentRepoMock.Verify(r => r.UpdateStatusAsync(docId, DocumentStatus.Failed, "Stop here"), Times.Once);
-            _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Exactly(3)); // Save in Enqueue, Save in Process(Processing), Save in Process(Failed)
+            _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Once);
         }
         finally
         {
@@ -698,11 +986,16 @@ public class DocumentServiceTests
                 OriginalFileName = "todelete.pdf",
                 ContentType = "application/pdf",
                 StoragePath = tempFilePath,
-                Status = DocumentStatus.Indexed
+                Status = DocumentStatus.Indexed,
+                UploadedByUserId = "head-user-id",
+                UploadedAt = new DateTime(2026, 7, 3, 2, 30, 0, DateTimeKind.Utc)
             };
 
             _documentRepoMock.Setup(r => r.GetByIdAsync(docId))
                 .ReturnsAsync(document);
+            _documentRepoMock.Setup(r => r.TryStartUploadedProcessingAsync(docId, It.IsAny<DateTime>()))
+                .Callback(() => document.Status = DocumentStatus.Processing)
+                .ReturnsAsync(true);
 
             var beforeArchive = DateTime.UtcNow;
             await _documentService.ArchiveDocumentAsync(
@@ -718,6 +1011,8 @@ public class DocumentServiceTests
             document.ArchivedAt.Should().BeOnOrAfter(beforeArchive).And.BeOnOrBefore(afterArchive);
             document.ArchivedAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
             document.UpdatedAt.Should().NotBeNull();
+            document.UploadedByUserId.Should().Be("head-user-id");
+            document.UploadedAt.Should().Be(new DateTime(2026, 7, 3, 2, 30, 0, DateTimeKind.Utc));
             _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Once);
             _documentRepoMock.Verify(r => r.Delete(It.IsAny<Document>()), Times.Never);
             _chunkRepoMock.Verify(r => r.DeleteByDocumentIdAsync(It.IsAny<int>()), Times.Never);
@@ -752,6 +1047,9 @@ public class DocumentServiceTests
             CourseId = 1,
             Course = new Course { Id = 1, Name = "PRN222" },
             Status = DocumentStatus.Archived,
+            UploadedByUserId = "head-user-id",
+            UploadedByUser = new ApplicationUser { Id = "head-user-id", Email = "headlecturer@demo.local" },
+            UploadedAt = new DateTime(2026, 7, 1, 2, 0, 0, DateTimeKind.Utc),
             ArchivedByUserId = "admin-user-id",
             ArchivedByUser = new ApplicationUser { Id = "admin-user-id", Email = "admin@demo.local" },
             ArchivedAt = archivedAt,
@@ -763,7 +1061,9 @@ public class DocumentServiceTests
         var result = await _documentService.GetDocumentByIdAsync(docId);
 
         result.Should().NotBeNull();
-        result!.ArchivedByEmail.Should().Be("admin@demo.local");
+        result!.UploadedByEmail.Should().Be("headlecturer@demo.local");
+        result.UploadedAt.Should().Be(new DateTime(2026, 7, 1, 2, 0, 0, DateTimeKind.Utc));
+        result.ArchivedByEmail.Should().Be("admin@demo.local");
         result.ArchivedAt.Should().Be(archivedAt);
         result.ArchiveReason.Should().Be("Không còn phù hợp");
         result.ArchivedFromStatus.Should().Be(nameof(DocumentStatus.Indexed));
@@ -773,11 +1073,16 @@ public class DocumentServiceTests
         document.ArchivedAt = null;
         document.ArchiveReason = null;
         document.ArchivedFromStatus = null;
+        document.UploadedByUserId = null;
+        document.UploadedByUser = null;
+        document.UploadedAt = null;
 
         var legacyResult = await _documentService.GetDocumentByIdAsync(docId);
 
         legacyResult.Should().NotBeNull();
-        legacyResult!.ArchivedByEmail.Should().BeNull();
+        legacyResult!.UploadedByEmail.Should().BeNull();
+        legacyResult.UploadedAt.Should().BeNull();
+        legacyResult.ArchivedByEmail.Should().BeNull();
         legacyResult.ArchivedAt.Should().BeNull();
         legacyResult.ArchiveReason.Should().BeNull();
         legacyResult.ArchivedFromStatus.Should().BeNull();
@@ -879,6 +1184,44 @@ public class DocumentServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Tài liệu đã tạm ẩn khỏi RAG nên không thể xử lý lại.");
+        _documentRepoMock.Verify(
+            r => r.UpdateStatusAsync(It.IsAny<int>(), It.IsAny<DocumentStatus>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessDocumentAsync_ShouldRejectCancelledDocument()
+    {
+        const int docId = 308;
+        _documentRepoMock.Setup(r => r.GetByIdAsync(docId))
+            .ReturnsAsync(new Document { Id = docId, Status = DocumentStatus.Cancelled });
+
+        var act = () => _documentService.ProcessDocumentAsync(docId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Tài liệu đã bị hủy tải lên nên không thể xử lý.");
+        _documentRepoMock.Verify(
+            r => r.TryStartUploadedProcessingAsync(It.IsAny<int>(), It.IsAny<DateTime>()),
+            Times.Never);
+        _documentRepoMock.Verify(
+            r => r.UpdateStatusAsync(It.IsAny<int>(), It.IsAny<DocumentStatus>(), It.IsAny<string?>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task EnqueueProcessDocumentAsync_ShouldRejectCancelledDocument()
+    {
+        const int docId = 309;
+        _documentRepoMock.Setup(r => r.GetByIdAsync(docId))
+            .ReturnsAsync(new Document { Id = docId, Status = DocumentStatus.Cancelled });
+
+        var act = () => _documentService.EnqueueProcessDocumentAsync(docId);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Tài liệu đã bị hủy tải lên nên không thể xử lý.");
+        _documentRepoMock.Verify(
+            r => r.TryStartUploadedProcessingAsync(It.IsAny<int>(), It.IsAny<DateTime>()),
+            Times.Never);
         _documentRepoMock.Verify(
             r => r.UpdateStatusAsync(It.IsAny<int>(), It.IsAny<DocumentStatus>(), It.IsAny<string?>()),
             Times.Never);

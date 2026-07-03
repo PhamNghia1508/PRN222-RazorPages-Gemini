@@ -143,6 +143,65 @@ public class DetailsModel(
         return Redirect("/Document");
     }
 
+    public async Task<IActionResult> OnPostCancelUploadAsync(int id, string? cancellationReason)
+    {
+        if (!CanUploadDocuments())
+        {
+            return Forbid();
+        }
+
+        var currentUserId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(currentUserId))
+        {
+            TempData["Error"] = "Khong xac dinh duoc tai khoan thuc hien huy tai lieu.";
+            return Redirect($"/Document/Details/{id}");
+        }
+
+        try
+        {
+            var document = await documentService.GetDocumentByIdAsync(id);
+            if (document == null)
+            {
+                return NotFound();
+            }
+
+            if (!await CanAccessCourseAsync(document.CourseId))
+            {
+                return Forbid();
+            }
+
+            if (!string.Equals(document.UploadedByUserId, currentUserId, StringComparison.Ordinal))
+            {
+                return Forbid();
+            }
+
+            await documentService.CancelMistakenUploadAsync(id, currentUserId, cancellationReason!);
+            TempData["Success"] = "Da huy tai lieu tai nham. Tai lieu va du lieu lien quan van duoc giu lai de truy vet.";
+        }
+        catch (ArgumentException ex)
+        {
+            logger.LogWarning(ex, "Invalid cancellation request for document {DocumentId}", id);
+            TempData["Error"] = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogWarning(ex, "Cannot cancel mistaken upload for document {DocumentId}", id);
+            TempData["Error"] = ex.Message;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogWarning(ex, "Unauthorized cancellation request for document {DocumentId}", id);
+            return Forbid();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error cancelling mistaken upload for document {DocumentId}", id);
+            TempData["Error"] = "Khong the huy tai lieu tai nham luc nay. Vui long thu lai sau.";
+        }
+
+        return Redirect($"/Document/Details/{id}");
+    }
+
     private bool CanUploadDocuments() =>
         User?.Identity?.IsAuthenticated == true &&
         User.IsInRole(ApplicationRoles.HeadLecturer);

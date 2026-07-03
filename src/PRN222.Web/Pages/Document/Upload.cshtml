@@ -2,8 +2,7 @@
 @using PRN222.Web.Infrastructure
 @model PRN222.Web.Pages.Document.UploadModel
 @{
-    ViewData["Title"] = "Nạp tài liệu";
-    var isAdmin = User.IsInRole(ApplicationRoles.Admin);
+    ViewData["Title"] = "Tải học liệu lên hệ thống";
     var courses = Model.Courses.ToList();
     var hasCourses = courses.Any();
 }
@@ -11,8 +10,8 @@
 <section class="ops-hero knowledge-hero fade-in-up">
     <div>
         <span class="section-kicker">Ingestion</span>
-        <h1>Nạp tài liệu vào kho tri thức</h1>
-        <p>Chọn môn học, tải lên PDF/DOCX/PPTX/PPT, sau đó xử lý tài liệu để tạo chunk và embedding cho Chat RAG.</p>
+        <h1>Tải học liệu lên hệ thống</h1>
+        <p>Trưởng bộ môn chịu trách nhiệm về tính chính xác, nguồn gốc và phạm vi môn học của tài liệu được đưa vào hệ thống RAG.</p>
     </div>
     <div class="hero-action-stack">
         <a asp-page="/Document/Index" class="btn btn-outline-primary">
@@ -45,14 +44,12 @@
         {
             <div class="inline-alert inline-alert-danger" role="alert">
                 <i class="bi bi-exclamation-triangle"></i>
-                <span>
-                    @(isAdmin
-                        ? "Chưa có môn học. Hãy tạo môn trước khi nạp tài liệu."
-                        : "Chưa có môn học được phân công để nạp tài liệu. Vui lòng liên hệ Admin để gán môn.")
-                </span>
+                <span>Bạn chưa được phân công quản lý môn học nào.</span>
             </div>
         }
 
+        @if (hasCourses)
+        {
         <form method="post" enctype="multipart/form-data" class="document-upload-form">
             @Html.AntiForgeryToken()
 
@@ -66,15 +63,8 @@
                             <option value="@course.Id">@course.Name</option>
                         }
                     </select>
-                    @if (isAdmin)
-                    {
-                        <a class="btn btn-outline-primary" asp-page="/Course/Create">
-                            <i class="bi bi-plus-lg"></i>
-                            <span>Thêm môn</span>
-                        </a>
-                    }
                 </div>
-                <small>@(isAdmin ? "Admin có thể mở form tạo môn mới và chọn Khoa phụ trách ngay từ đây." : "Trưởng bộ môn chỉ nạp tài liệu vào các môn được Admin phân công.")</small>
+                <small>Chỉ các môn học thuộc khoa/bộ môn và đã được Admin phân công mới được hiển thị.</small>
             </div>
 
             <div class="document-upload-field">
@@ -100,8 +90,20 @@
                 <span>File vượt quá giới hạn 50 MB. Vui lòng chọn file nhỏ hơn.</span>
             </div>
 
+            <div class="form-check document-upload-field">
+                <input class="form-check-input"
+                       type="checkbox"
+                       name="acceptsResponsibility"
+                       value="true"
+                       id="acceptsResponsibility"
+                       required />
+                <label class="form-check-label" for="acceptsResponsibility">
+                    Tôi xác nhận tài liệu thuộc đúng môn học, có nguồn phù hợp và chịu trách nhiệm về nội dung được tải lên.
+                </label>
+            </div>
+
             <div class="document-upload-actions">
-                <button type="submit" id="submitBtn" class="btn btn-primary" disabled="@(!hasCourses)">
+                <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
                     <i class="bi bi-upload"></i>
                     <span>Nạp tài liệu</span>
                 </button>
@@ -111,6 +113,7 @@
                 </a>
             </div>
         </form>
+        }
     </main>
 
     <aside class="workspace-panel document-upload-guide">
@@ -144,6 +147,8 @@
 <div id="documentUploadToast" class="app-toast d-none" role="status" aria-live="polite"></div>
 
 @section Scripts {
+    @if (hasCourses)
+    {
     <script>
         const fileInput = document.getElementById('file');
         const preview = document.getElementById('filePreview');
@@ -152,6 +157,7 @@
         const fileSizeText = document.getElementById('fileSize');
         const uploadMessage = document.getElementById('uploadMessage');
         const courseSelect = document.getElementById('courseId');
+        const responsibilityCheckbox = document.getElementById('acceptsResponsibility');
         const maxBytes = 50 * 1024 * 1024;
 
         function showInlineMessage(target, message) {
@@ -175,7 +181,10 @@
 
         function updateSubmitState() {
             const file = fileInput.files[0];
-            submitBtn.disabled = !courseSelect.value || !file || file.size > maxBytes;
+            submitBtn.disabled = !courseSelect.value ||
+                !file ||
+                file.size > maxBytes ||
+                !responsibilityCheckbox.checked;
         }
 
         fileInput.addEventListener('change', function (event) {
@@ -226,11 +235,19 @@
             if (!fileInput.files.length) {
                 event.preventDefault();
                 showInlineMessage(uploadMessage, 'Vui lòng chọn file tài liệu.');
+                return;
+            }
+
+            if (!responsibilityCheckbox.checked) {
+                event.preventDefault();
+                showInlineMessage(uploadMessage, 'Bạn phải xác nhận trách nhiệm trước khi tải tài liệu.');
             }
         });
 
         courseSelect.addEventListener('change', updateSubmitState);
+        responsibilityCheckbox.addEventListener('change', updateSubmitState);
         updateSubmitState();
     </script>
+    }
 }
 

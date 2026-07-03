@@ -13,4 +13,7 @@ public record DocumentDto(
     string Status,
     string CourseName,
     int CourseId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? UploadedByEmail = null,
+    DateTime? UploadedAt = null,
+    string? UploadedByUserId = null);

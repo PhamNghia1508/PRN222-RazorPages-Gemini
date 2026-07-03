@@ -1,4 +1,5 @@
 @page "/Document/Details/{id:int}"
+@using System.Security.Claims
 @using PRN222.Web.Infrastructure
 @model PRN222.Web.Pages.Document.DetailsModel
 @{
@@ -11,7 +12,12 @@
     var isProcessing = string.Equals(Model.Document.Status, "Processing", StringComparison.OrdinalIgnoreCase);
     var isFailed = string.Equals(Model.Document.Status, "Failed", StringComparison.OrdinalIgnoreCase);
     var isArchived = string.Equals(Model.Document.Status, "Archived", StringComparison.OrdinalIgnoreCase);
-    var canArchive = isAdmin && !isProcessing && !isArchived;
+    var isCancelled = string.Equals(Model.Document.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+    var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var canCancelUpload = canUploadDocuments &&
+        string.Equals(Model.Document.Status, "Uploaded", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(Model.Document.UploadedByUserId, currentUserId, StringComparison.Ordinal);
+    var canArchive = isAdmin && !isProcessing && !isArchived && !isCancelled;
 
     string StatusClass(string status)
     {
@@ -22,6 +28,7 @@
             "processing" => "status-running",
             "failed" => "status-bad",
             "archived" => "status-muted",
+            "cancelled" => "status-muted",
             _ => "status-muted"
         };
     }
@@ -35,6 +42,7 @@
             "processing" => "Đang xử lý",
             "failed" => "Lỗi xử lý",
             "archived" => "Đã tạm ẩn",
+            "cancelled" => "Đã hủy tải lên",
             _ => status ?? "Chưa rõ"
         };
     }
@@ -68,7 +76,7 @@
         </p>
     </div>
     <div class="hero-action-stack">
-        @if (canUploadDocuments && !isCompleted && !isProcessing)
+        @if (canUploadDocuments && !isCompleted && !isProcessing && !isArchived && !isCancelled)
         {
             <form asp-page-handler="Process" asp-route-id="@Model.Document.Id" method="post">
                 @Html.AntiForgeryToken()
@@ -84,6 +92,15 @@
                     data-bs-toggle="modal"
                     data-bs-target="#archiveDocumentModal">
                 <i class="bi bi-archive"></i> Tạm ẩn khỏi RAG
+            </button>
+        }
+        @if (canCancelUpload)
+        {
+            <button type="button"
+                    class="btn btn-outline-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#cancelUploadModal">
+                <i class="bi bi-x-circle"></i> Hủy tài liệu tải nhầm
             </button>
         }
     </div>
@@ -226,6 +243,37 @@
     </div>
 </section>
 
+<section class="workspace-panel fade-in-up" aria-labelledby="upload-audit-title">
+    <div class="workspace-panel-header">
+        <div>
+            <span class="section-kicker">Upload accountability</span>
+            <h2 id="upload-audit-title">Trách nhiệm học liệu</h2>
+        </div>
+    </div>
+    @if (Model.Document.UploadedAt.HasValue)
+    {
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Người tải lên</dt>
+            <dd class="col-sm-9">@(Model.Document.UploadedByEmail ?? "Tài khoản không còn khả dụng")</dd>
+            <dt class="col-sm-3">Thời gian tải lên</dt>
+            <dd class="col-sm-9">@Model.Document.UploadedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</dd>
+            <dt class="col-sm-3">Môn học</dt>
+            <dd class="col-sm-9">@Model.Document.CourseName</dd>
+            <dt class="col-sm-3">Khoa/Bộ môn</dt>
+            <dd class="col-sm-9">@(Model.Document.DepartmentName ?? "Chưa xác định")</dd>
+            <dt class="col-sm-3">Trạng thái hiện tại</dt>
+            <dd class="col-sm-9">@StatusText(Model.Document.Status)</dd>
+        </dl>
+    }
+    else
+    {
+        <div class="inline-alert mb-0">
+            <i class="bi bi-info-circle"></i>
+            <span>Không có dữ liệu người tải lên — tài liệu được tạo trước khi tính năng truy vết upload được bổ sung.</span>
+        </div>
+    }
+</section>
+
 @if (isArchived)
 {
     <section class="workspace-panel fade-in-up" aria-labelledby="archive-audit-title">
@@ -256,6 +304,70 @@
             </div>
         }
     </section>
+}
+
+@if (isCancelled)
+{
+    <section class="workspace-panel fade-in-up" aria-labelledby="cancellation-audit-title">
+        <div class="workspace-panel-header">
+            <div>
+                <span class="section-kicker">Cancellation audit</span>
+                <h2 id="cancellation-audit-title">Thông tin hủy tải lên</h2>
+            </div>
+        </div>
+        @if (Model.Document.CancelledAt.HasValue)
+        {
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Người thực hiện</dt>
+                <dd class="col-sm-9">@(Model.Document.CancelledByEmail ?? "Tài khoản không còn khả dụng")</dd>
+                <dt class="col-sm-3">Thời gian</dt>
+                <dd class="col-sm-9">@Model.Document.CancelledAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</dd>
+                <dt class="col-sm-3">Lý do</dt>
+                <dd class="col-sm-9">@(Model.Document.CancellationReason ?? "Không có lý do được lưu")</dd>
+            </dl>
+        }
+        else
+        {
+            <div class="inline-alert mb-0">
+                <i class="bi bi-info-circle"></i>
+                <span>Không có dữ liệu hủy tải lên.</span>
+            </div>
+        }
+    </section>
+}
+
+@if (canCancelUpload)
+{
+    <div class="modal fade" id="cancelUploadModal" tabindex="-1" aria-labelledby="cancelUploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form asp-page-handler="CancelUpload" asp-route-id="@Model.Document.Id" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-header">
+                        <h2 class="modal-title fs-5" id="cancelUploadModalLabel">Hủy tài liệu tải nhầm</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Tài liệu sẽ được đánh dấu là đã hủy tải lên. File và dữ liệu liên quan vẫn được giữ lại để truy vết.</p>
+                        <label for="cancellationReason" class="form-label">Lý do hủy tài liệu tải nhầm</label>
+                        <textarea id="cancellationReason"
+                                  name="cancellationReason"
+                                  class="form-control"
+                                  rows="4"
+                                  maxlength="1000"
+                                  required
+                                  placeholder="Nhập lý do hủy, ví dụ: tải nhầm phiên bản hoặc sai môn học."></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-x-circle"></i> Hủy tài liệu tải nhầm
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 }
 
 @if (canArchive)

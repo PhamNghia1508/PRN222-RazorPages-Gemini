@@ -18,5 +18,8 @@ public enum DocumentStatus
     Failed = 3,
 
     /// <summary>Document is retained for traceability but excluded from RAG retrieval.</summary>
-    Archived = 4
+    Archived = 4,
+
+    /// <summary>An upload was cancelled by its uploader before processing began.</summary>
+    Cancelled = 5
 }
